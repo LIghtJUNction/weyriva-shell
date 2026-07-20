@@ -6,15 +6,10 @@ pkgdesc='A composed niri desktop environment with IPC and plugins (Git version)'
 arch=('any')
 url='https://github.com/LIghtJUNction/weyriva-shell'
 license=('MIT')
-depends=('python' 'niri' 'waybar' 'fuzzel' 'mako' 'swaybg' 'greetd' 'greetd-tuigreet' 'foot' 'inter-font' 'noto-fonts' 'ttf-nerd-fonts-symbols-mono')
+depends=('python' 'niri' 'waybar' 'fuzzel' 'mako' 'swaybg' 'greetd' 'greetd-tuigreet' 'foot' 'noto-fonts' 'ttf-nerd-fonts-symbols-mono')
 makedepends=('git')
 provides=('weyriva-shell')
 conflicts=('weyriva-shell')
-backup=('etc/niri/config.kdl'
-        'etc/xdg/waybar/config.jsonc'
-        'etc/xdg/waybar/style.css'
-        'etc/xdg/fuzzel/fuzzel.ini'
-        'etc/xdg/mako/config')
 source=("git+${url}.git")
 sha256sums=('SKIP')
 
@@ -26,11 +21,11 @@ pkgver() {
 package() {
   cd weyriva-shell
   install -Dm755 bin/weyriva "$pkgdir/usr/bin/weyriva"
-  install -Dm644 config/niri/config.kdl "$pkgdir/etc/niri/config.kdl"
-  install -Dm644 config/waybar/config.jsonc "$pkgdir/etc/xdg/waybar/config.jsonc"
-  install -Dm644 config/waybar/style.css "$pkgdir/etc/xdg/waybar/style.css"
-  install -Dm644 config/fuzzel/fuzzel.ini "$pkgdir/etc/xdg/fuzzel/fuzzel.ini"
-  install -Dm644 config/mako/config "$pkgdir/etc/xdg/mako/config"
+  install -Dm644 config/niri/config.kdl "$pkgdir/usr/share/weyriva/config/niri/config.kdl"
+  install -Dm644 config/waybar/config.jsonc "$pkgdir/usr/share/weyriva/config/waybar/config.jsonc"
+  install -Dm644 config/waybar/style.css "$pkgdir/usr/share/weyriva/config/waybar/style.css"
+  install -Dm644 config/fuzzel/fuzzel.ini "$pkgdir/usr/share/weyriva/config/fuzzel/fuzzel.ini"
+  install -Dm644 config/mako/config "$pkgdir/usr/share/weyriva/config/mako/config"
   install -Dm644 config/greetd/config.toml "$pkgdir/usr/share/weyriva/greetd/config.toml"
   install -Dm644 assets/wallpapers/weyriva-coral.svg "$pkgdir/usr/share/weyriva/wallpapers/weyriva-coral.svg"
   install -Dm644 user-share/wayland-sessions/weyriva.desktop "$pkgdir/usr/share/wayland-sessions/weyriva.desktop"

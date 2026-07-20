@@ -1,14 +1,14 @@
 // Weyriva Shell niri defaults. Local overrides can be imported at the end.
 input {
-    keyboard { xkb { layout "us" } }
+    keyboard { xkb { layout "us"; }; }
     touchpad { tap; natural-scroll; }
 }
 
 layout {
-    gaps 12
+    gaps 16
     center-focused-column "never"
     default-column-width { proportion 0.55; }
-    focus-ring { width 2; active-color "#f06a5f"; inactive-color "#29252266"; }
+    focus-ring { width 3; active-color "#ef6a5b"; inactive-color "#29252240"; }
     border { off; }
 }
 
@@ -39,7 +39,7 @@ binds {
 }
 
 window-rule {
-    geometry-corner-radius 12
+    geometry-corner-radius 16
     clip-to-geometry true
 }
 

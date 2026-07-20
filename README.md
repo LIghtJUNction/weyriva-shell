@@ -25,7 +25,7 @@ The installer is a dry run unless `--apply` is given. It preserves conflicts; `-
 ./scripts/install.sh --apply
 ```
 
-The default user install deliberately does not copy a Wayland session desktop entry and is not registered with a system display manager. Test it from a TTY with `~/.local/bin/weyriva session start`; Weyriva adds its own executable directory to the niri session's `PATH` so its startup commands remain reachable. The session expects `niri`, `waybar`, `fuzzel`, `mako`, `swaybg`, `foot`, Inter, Noto, and Nerd Symbols fonts. Selecting **Weyriva Shell** in greetd requires the future system/AUR installation, which owns `/usr/bin/weyriva` and `/usr/share/wayland-sessions/weyriva.desktop`.
+The default user install deliberately does not copy a Wayland session desktop entry and is not registered with a system display manager. Test it from a TTY with `~/.local/bin/weyriva session start`; Weyriva adds its own executable directory to the niri session's `PATH` so its startup commands remain reachable. The session expects `niri`, `waybar`, `fuzzel`, `mako`, `swaybg`, `foot`, Noto Sans, and Nerd Symbols fonts. Selecting **Weyriva Shell** in greetd requires the future system/AUR installation, which owns `/usr/bin/weyriva` and `/usr/share/wayland-sessions/weyriva.desktop`.
 
 ### Updates and removal
 
@@ -54,10 +54,24 @@ sudo ./scripts/install-greetd.sh --apply
 ```bash
 weyriva daemon
 weyriva status
+weyriva diagnose
+weyriva diagnose --json
+sudo weyriva startup ensure
 weyriva ipc call weyriva.info
 weyriva ipc call weyriva.launcher.open
 weyriva plugin list
 ```
+
+`weyriva diagnose` is the Niri-only health check for the compositor, session entry,
+greetd login path, required desktop commands, user services, and the current Niri
+socket. It exits non-zero when a required login component is missing, so it can be
+used directly from shell scripts.
+
+`sudo weyriva startup ensure` validates the selected Niri config, installs the
+packaged greetd template with a timestamped backup, backs up recognized legacy
+Weyriva user units while preserving custom overrides, reloads the user service
+manager, and enables greetd. It never restarts greetd or the current graphical
+session.
 
 Read [IPC](docs/IPC.md), [plugins](docs/PLUGINS.md), [architecture](docs/ARCHITECTURE.md), and the [roadmap](docs/ROADMAP.md). A concise Chinese introduction is in [docs/README.zh-CN.md](docs/README.zh-CN.md).
 
