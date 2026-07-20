@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1440" viewBox="0 0 2560 1440">
+  <title>Weyriva Coral Field</title>
+  <desc>An original warm editorial composition in cream, coral, and ink.</desc>
+  <rect width="2560" height="1440" fill="#f6efe5"/>
+  <path d="M0 1080C360 884 714 870 1062 1038c362 176 756 196 1498-126v528H0Z" fill="#ef6a5b"/>
+  <path d="M1820 0h740v824c-298 86-552 34-740-158Z" fill="#292522"/>
+  <circle cx="2005" cy="366" r="238" fill="#fffaf3"/>
+  <path d="M170 238h950v18H170zm0 54h690v8H170zm0 34h520v8H170" fill="#292522" opacity=".86"/>
+  <path d="M170 1230h790v18H170" fill="#fffaf3" opacity=".82"/>
+</svg>

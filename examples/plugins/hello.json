@@ -1,0 +1,10 @@
+{
+  "id": "example",
+  "version": 1,
+  "methods": {
+    "example.hello": {
+      "argv": ["hello/hello.py"],
+      "timeout": 2
+    }
+  }
+}

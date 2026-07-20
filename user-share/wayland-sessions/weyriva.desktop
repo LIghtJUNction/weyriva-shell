@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=Weyriva Shell
+Comment=A composed niri desktop session
+Exec=/usr/bin/weyriva session start
+Type=Application

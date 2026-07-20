@@ -1,0 +1,11 @@
+[Unit]
+Description=Weyriva Waybar panel
+PartOf=graphical-session.target
+After=graphical-session.target weyriva-ipc.service
+Requisite=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/waybar
+Restart=on-failure
+RestartSec=1

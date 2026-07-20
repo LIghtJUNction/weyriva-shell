@@ -1,0 +1,14 @@
+SWAP.md
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+build/
+dist/
+*.egg-info/
+*.tmp
+*.log
+packaging/aur/*.pkg.tar.*
+packaging/aur/src/
+packaging/aur/pkg/

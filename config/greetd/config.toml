@@ -1,0 +1,7 @@
+# System template only. Install explicitly with scripts/install-greetd.sh --apply.
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --time --remember --remember-session --sessions /usr/share/wayland-sessions"
+user = "greeter"

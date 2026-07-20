@@ -1,0 +1,518 @@
+#!/usr/bin/env python3
+"""Weyriva Shell command line, IPC daemon, and plugin host."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import selectors
+import shutil
+import signal
+import socket
+import socketserver
+import stat
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from collections.abc import Mapping
+from typing import Final, NoReturn, TextIO
+
+VERSION: Final = "0.1.0"
+PROTOCOL_VERSION: Final = 1
+MAX_REQUEST_BYTES: Final = 64 * 1024
+MAX_PLUGIN_OUTPUT_BYTES: Final = 1024 * 1024
+DEFAULT_TIMEOUT: Final = 3.0
+RESERVED_PREFIX: Final = "weyriva."
+MAX_HANDLERS: Final = 16
+READ_TIMEOUT: Final = 3.0
+PLUGIN_ID_PATTERN: Final = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
+
+JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
+
+
+class ProtocolError(ValueError):
+    """A client request violates the IPC protocol."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class PluginError(RuntimeError):
+    """A plugin manifest or invocation is invalid."""
+
+
+@dataclass(frozen=True)
+class PluginMethod:
+    plugin: str
+    method: str
+    argv: tuple[str, ...]
+    timeout: float
+    manifest: Path
+
+
+@dataclass(frozen=True)
+class PluginRegistry:
+    methods: dict[str, PluginMethod]
+    manifests: tuple[Path, ...]
+    errors: tuple[str, ...]
+
+
+def xdg_runtime_dir() -> Path:
+    configured = os.environ.get("XDG_RUNTIME_DIR")
+    if not configured:
+        raise RuntimeError("XDG_RUNTIME_DIR is not set; log in through a user session")
+    path = Path(configured)
+    if not path.is_dir():
+        raise RuntimeError(f"XDG_RUNTIME_DIR does not exist: {path}")
+    return path
+
+
+def socket_path() -> Path:
+    return xdg_runtime_dir() / "weyriva" / "weyriva.sock"
+
+
+def plugin_roots() -> tuple[Path, ...]:
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    data_dirs = tuple(
+        Path(item) for item in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":") if item
+    )
+    return (config_home / "weyriva/plugins", data_home / "weyriva/plugins") + tuple(
+        item / "weyriva/plugins" for item in data_dirs
+    )
+
+
+def _manifest_files() -> tuple[Path, ...]:
+    found: list[Path] = []
+    for root in plugin_roots():
+        if root.is_dir():
+            found.extend(sorted(root.glob("*.json")))
+    return tuple(found)
+
+
+def _parse_plugin(path: Path) -> tuple[str, dict[str, PluginMethod]]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise PluginError(f"cannot read JSON: {error}") from error
+    if not isinstance(document, dict):
+        raise PluginError("manifest root must be an object")
+    plugin_id = document.get("id")
+    version = document.get("version")
+    methods = document.get("methods")
+    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
+        raise PluginError("version must be integer 1")
+    if not isinstance(plugin_id, str) or PLUGIN_ID_PATTERN.fullmatch(plugin_id) is None:
+        raise PluginError("id must match [a-z][a-z0-9-]{1,63}")
+    if not isinstance(methods, dict) or not methods:
+        raise PluginError("methods must be a non-empty object")
+
+    parsed: dict[str, PluginMethod] = {}
+    for name, specification in methods.items():
+        if (
+            not isinstance(name, str)
+            or not name.startswith(f"{plugin_id}.")
+            or name.startswith(RESERVED_PREFIX)
+        ):
+            raise PluginError(f"invalid or reserved method name: {name!r}")
+        if not isinstance(specification, dict):
+            raise PluginError(f"method {name!r} must be an object")
+        argv = specification.get("argv")
+        timeout = specification.get("timeout", DEFAULT_TIMEOUT)
+        if not isinstance(argv, list) or not argv or not all(isinstance(item, str) and item for item in argv):
+            raise PluginError(f"method {name!r} argv must be a non-empty string array")
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0.1 <= timeout <= 30:
+            raise PluginError(f"method {name!r} timeout must be between 0.1 and 30 seconds")
+        executable = Path(argv[0])
+        resolved_argv = list(argv)
+        if not executable.is_absolute() and "/" in argv[0]:
+            resolved_argv[0] = str((path.parent / executable).resolve())
+        parsed[name] = PluginMethod(plugin_id, name, tuple(resolved_argv), float(timeout), path)
+    return plugin_id, parsed
+
+
+def discover_plugins() -> PluginRegistry:
+    registry: dict[str, PluginMethod] = {}
+    accepted: list[Path] = []
+    errors: list[str] = []
+    for manifest in _manifest_files():
+        try:
+            _plugin_id, methods = _parse_plugin(manifest)
+            duplicates = sorted(set(methods) & set(registry))
+            if duplicates:
+                raise PluginError(f"duplicate methods: {', '.join(duplicates)}")
+            registry.update(methods)
+            accepted.append(manifest)
+        except PluginError as error:
+            errors.append(f"{manifest}: {error}")
+    return PluginRegistry(registry, tuple(accepted), tuple(errors))
+
+
+def _terminate_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    if process.poll() is None:
+        try:
+            process.wait(timeout=0.2)
+        except subprocess.TimeoutExpired:
+            pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    if process.poll() is None:
+        process.wait(timeout=1)
+
+
+def run_plugin(method: PluginMethod, params: JsonValue) -> JsonValue:
+    payload = json.dumps(params, ensure_ascii=False).encode()
+    try:
+        process = subprocess.Popen(
+            method.argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except FileNotFoundError as error:
+        raise PluginError(f"plugin executable not found: {method.argv[0]}") from error
+    except PermissionError as error:
+        raise PluginError(f"plugin executable is not runnable: {method.argv[0]}") from error
+    assert process.stdin is not None and process.stdout is not None and process.stderr is not None
+    try:
+        process.stdin.write(payload)
+        process.stdin.close()
+    except BrokenPipeError:
+        process.stdin.close()
+
+    output = bytearray()
+    error_output = bytearray()
+    deadline = time.monotonic() + method.timeout
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ, output)
+    selector.register(process.stderr, selectors.EVENT_READ, error_output)
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _terminate_group(process)
+                raise PluginError(f"plugin timed out after {method.timeout:g}s")
+            events = selector.select(remaining)
+            if not events:
+                _terminate_group(process)
+                raise PluginError(f"plugin timed out after {method.timeout:g}s")
+            for key, _mask in events:
+                chunk = os.read(key.fd, 65536)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                destination: bytearray = key.data
+                destination.extend(chunk)
+                limit = MAX_PLUGIN_OUTPUT_BYTES if destination is output else 64 * 1024
+                if len(destination) > limit:
+                    _terminate_group(process)
+                    stream = "stdout" if destination is output else "stderr"
+                    raise PluginError(f"plugin {stream} exceeds {limit // 1024} KiB")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _terminate_group(process)
+            raise PluginError(f"plugin timed out after {method.timeout:g}s")
+        return_code = process.wait(timeout=remaining)
+    except subprocess.TimeoutExpired as error:
+        _terminate_group(process)
+        raise PluginError(f"plugin timed out after {method.timeout:g}s") from error
+    finally:
+        selector.close()
+        process.stdout.close()
+        process.stderr.close()
+        if process.poll() is None:
+            _terminate_group(process)
+
+    if return_code != 0:
+        stderr = error_output[:4096].decode(errors="replace").strip()
+        raise PluginError(f"plugin exited {return_code}: {stderr or 'no error output'}")
+    try:
+        return json.loads(output)
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise PluginError("plugin stdout is not one JSON value") from error
+
+
+def plugin_summary(registry: PluginRegistry) -> dict[str, JsonValue]:
+    return {
+        "plugins": [str(path) for path in registry.manifests],
+        "methods": sorted(registry.methods),
+        "errors": list(registry.errors),
+    }
+
+
+def _spawn_fixed(command: list[str]) -> dict[str, JsonValue]:
+    try:
+        process = subprocess.Popen(command, start_new_session=True)
+    except FileNotFoundError as error:
+        raise ProtocolError("unavailable", f"command is not installed: {command[0]}") from error
+    return {"pid": process.pid, "command": command[0]}
+
+
+def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonValue:
+    match method:
+        case "weyriva.ping":
+            return {"pong": True, "protocol": PROTOCOL_VERSION}
+        case "weyriva.info":
+            return {"name": "Weyriva Shell", "version": VERSION, "protocol": PROTOCOL_VERSION}
+        case "weyriva.plugin.list":
+            return plugin_summary(registry)
+        case "weyriva.launcher.open":
+            if params not in ({}, None):
+                raise ProtocolError("invalid_params", "launcher.open takes no parameters")
+            return _spawn_fixed(["fuzzel"])
+        case "weyriva.notifications.dismiss_all":
+            if params not in ({}, None):
+                raise ProtocolError("invalid_params", "notifications.dismiss_all takes no parameters")
+            try:
+                completed = subprocess.run(
+                    ["makoctl", "dismiss", "--all"], capture_output=True, text=True, timeout=2, check=False
+                )
+            except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+                raise ProtocolError("unavailable", f"makoctl unavailable: {error}") from error
+            if completed.returncode != 0:
+                raise ProtocolError("action_failed", completed.stderr.strip() or "makoctl failed")
+            return {"dismissed": True}
+        case _ if method in registry.methods:
+            try:
+                return run_plugin(registry.methods[method], params)
+            except PluginError as error:
+                raise ProtocolError("plugin_error", str(error)) from error
+        case _:
+            raise ProtocolError("method_not_found", f"unknown method: {method}")
+
+
+def process_request(document: JsonValue, registry: PluginRegistry) -> dict[str, JsonValue]:
+    request_id: JsonValue = None
+    try:
+        if not isinstance(document, dict):
+            raise ProtocolError("invalid_request", "request must be an object")
+        request_id = document.get("id")
+        if isinstance(request_id, (list, dict)):
+            raise ProtocolError("invalid_request", "id must be a scalar JSON value")
+        if document.get("protocol") != PROTOCOL_VERSION:
+            raise ProtocolError("unsupported_protocol", f"protocol must be {PROTOCOL_VERSION}")
+        method = document.get("method")
+        if not isinstance(method, str) or not method:
+            raise ProtocolError("invalid_request", "method must be a non-empty string")
+        params: JsonValue = document.get("params", {})
+        return {"id": request_id, "result": dispatch(method, params, registry)}
+    except ProtocolError as error:
+        return {"id": request_id, "error": {"code": error.code, "message": str(error)}}
+
+
+def process_line(line: bytes, registry: PluginRegistry) -> bytes:
+    if len(line) > MAX_REQUEST_BYTES or not line.endswith(b"\n"):
+        response: dict[str, JsonValue] = {
+            "id": None,
+            "error": {"code": "request_too_large", "message": "request must be one newline-terminated line up to 64 KiB"},
+        }
+    else:
+        try:
+            document: JsonValue = json.loads(line)
+            response = process_request(document, registry)
+        except (UnicodeError, json.JSONDecodeError):
+            response = {"id": None, "error": {"code": "parse_error", "message": "invalid JSON"}}
+    return json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
+
+
+class RequestHandler(socketserver.StreamRequestHandler):
+    def handle(self) -> None:
+        self.request.settimeout(READ_TIMEOUT)
+        try:
+            line = self.rfile.readline(MAX_REQUEST_BYTES + 1)
+            self.wfile.write(process_line(line, self.server.registry))  # type: ignore[attr-defined]
+        except socket.timeout:
+            return
+
+
+class IpcServer(socketserver.ThreadingUnixStreamServer):
+    daemon_threads = True
+    allow_reuse_address = False
+
+    def __init__(self, path: str, registry: PluginRegistry) -> None:
+        self.registry = registry
+        self._handler_slots = threading.BoundedSemaphore(MAX_HANDLERS)
+        super().__init__(path, RequestHandler)
+
+    def verify_request(self, request: socket.socket, client_address: object) -> bool:
+        if self._handler_slots.acquire(blocking=False):
+            return True
+        request.close()
+        return False
+
+    def process_request_thread(self, request: socket.socket, client_address: object) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._handler_slots.release()
+
+
+def acquire_daemon_lock(path: Path) -> TextIO:
+    lock = path.open("a+", encoding="utf-8")
+    lock.flush()
+    path.chmod(0o600)
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        lock.close()
+        raise RuntimeError("another Weyriva daemon is already running") from error
+    return lock
+
+
+def run_daemon() -> int:
+    path = socket_path()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.parent.chmod(0o700)
+    lock = acquire_daemon_lock(path.parent / "daemon.lock")
+    try:
+        if path.exists() or path.is_socket():
+            mode = path.lstat().st_mode
+            if not stat.S_ISSOCK(mode):
+                raise RuntimeError(f"refusing to replace non-socket path: {path}")
+            path.unlink()
+        registry = discover_plugins()
+        server = IpcServer(str(path), registry)
+        path.chmod(0o600)
+
+        def stop(_signum: int, _frame: object) -> None:
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGTERM, stop)
+        signal.signal(signal.SIGINT, stop)
+        try:
+            try:
+                server.serve_forever(poll_interval=0.2)
+            except KeyboardInterrupt:
+                pass
+        finally:
+            server.server_close()
+            if path.is_socket():
+                path.unlink()
+    finally:
+        lock.close()
+    return 0
+
+
+def ipc_call(method: str, params: JsonValue, timeout: float = DEFAULT_TIMEOUT) -> dict[str, JsonValue]:
+    request = {"protocol": PROTOCOL_VERSION, "id": 1, "method": method, "params": params}
+    encoded = json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(timeout)
+        client.connect(str(socket_path()))
+        client.sendall(encoded)
+        chunks = bytearray()
+        while not chunks.endswith(b"\n"):
+            chunk = client.recv(4096)
+            if not chunk:
+                raise RuntimeError("daemon closed the connection without a response")
+            chunks.extend(chunk)
+            if len(chunks) > MAX_PLUGIN_OUTPUT_BYTES + MAX_REQUEST_BYTES:
+                raise RuntimeError("daemon response is too large")
+    parsed = json.loads(chunks)
+    if not isinstance(parsed, dict):
+        raise RuntimeError("daemon response is not an object")
+    return parsed
+
+
+def _json_argument(value: str) -> JsonValue:
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as error:
+        raise argparse.ArgumentTypeError(f"invalid JSON: {error.msg}") from error
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="weyriva", description="Weyriva Shell control plane")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("daemon", help="run the user IPC daemon")
+    commands.add_parser("status", help="check daemon status")
+    ipc = commands.add_parser("ipc", help="use the IPC protocol")
+    ipc_commands = ipc.add_subparsers(dest="ipc_command", required=True)
+    call = ipc_commands.add_parser("call", help="call an IPC method")
+    call.add_argument("method")
+    call.add_argument("--params", type=_json_argument, default={})
+    plugin = commands.add_parser("plugin", help="inspect trusted local plugins")
+    plugin_commands = plugin.add_subparsers(dest="plugin_command", required=True)
+    plugin_commands.add_parser("list", help="list discovered plugin methods")
+    session = commands.add_parser("session", help="manage the desktop session")
+    session_commands = session.add_subparsers(dest="session_command", required=True)
+    session_commands.add_parser("start", help="start niri as the current session")
+    commands.add_parser("wallpaper", help="run the Weyriva wallpaper process")
+    return parser
+
+
+def _print_json(value: JsonValue) -> None:
+    print(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True))
+
+
+def session_environment(argv0: str, environment: Mapping[str, str]) -> dict[str, str]:
+    executable = Path(argv0)
+    if executable.parent == Path("."):
+        located = shutil.which(argv0, path=environment.get("PATH"))
+        if located is not None:
+            executable = Path(located)
+    executable_directory = str(executable.expanduser().resolve().parent)
+    child_environment = dict(environment)
+    path_entries = [entry for entry in child_environment.get("PATH", "").split(os.pathsep) if entry]
+    if executable_directory not in path_entries:
+        path_entries.insert(0, executable_directory)
+    child_environment["PATH"] = os.pathsep.join(path_entries)
+    return child_environment
+
+
+def start_session(argv0: str, environment: Mapping[str, str]) -> NoReturn:
+    os.execvpe("niri-session", ["niri-session"], session_environment(argv0, environment))
+    raise RuntimeError("niri-session exec unexpectedly returned")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        if args.command == "daemon":
+            return run_daemon()
+        if args.command == "status":
+            response = ipc_call("weyriva.ping", {})
+            _print_json(response)
+            return 0 if "result" in response else 1
+        if args.command == "ipc" and args.ipc_command == "call":
+            response = ipc_call(args.method, args.params)
+            _print_json(response)
+            return 0 if "result" in response else 1
+        if args.command == "plugin" and args.plugin_command == "list":
+            _print_json(plugin_summary(discover_plugins()))
+            return 0
+        if args.command == "session" and args.session_command == "start":
+            start_session(sys.argv[0], os.environ)
+        if args.command == "wallpaper":
+            data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+            candidates = (
+                data_home / "weyriva/wallpapers/weyriva-coral.svg",
+                Path("/usr/share/weyriva/wallpapers/weyriva-coral.svg"),
+            )
+            wallpaper = next((candidate for candidate in candidates if candidate.is_file()), None)
+            if wallpaper is None:
+                raise RuntimeError("Weyriva wallpaper is not installed")
+            os.execvp("swaybg", ["swaybg", "-m", "fill", "-i", str(wallpaper)])
+        raise RuntimeError("unhandled command")
+    except (ConnectionError, FileNotFoundError, OSError, RuntimeError, socket.timeout, json.JSONDecodeError) as error:
+        print(f"weyriva: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,35 @@
+@define-color cream #f6efe5;
+@define-color paper #fffaf3;
+@define-color ink #292522;
+@define-color muted #716964;
+@define-color coral #ef6a5b;
+
+* {
+  border: none;
+  border-radius: 0;
+  font-family: "Inter", "Symbols Nerd Font Mono", "Noto Sans", sans-serif;
+  font-size: 13px;
+  min-height: 0;
+}
+
+window#waybar {
+  background: alpha(@cream, 0.94);
+  color: @ink;
+  border-bottom: 1px solid alpha(@ink, 0.12);
+}
+
+#workspaces,
+#window,
+#clock,
+#network,
+#pulseaudio,
+#battery,
+#tray {
+  padding: 0 12px;
+  margin: 5px 0;
+}
+
+#workspaces button { color: @muted; padding: 0 5px; }
+#workspaces button.active { color: @coral; }
+#clock { background: @paper; border-radius: 10px; font-weight: 600; }
+#battery.warning:not(.charging) { color: @coral; }
