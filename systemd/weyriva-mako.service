@@ -6,6 +6,6 @@ Requisite=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/mako
+ExecStart=%h/.local/bin/weyriva component mako
 Restart=on-failure
 RestartSec=1

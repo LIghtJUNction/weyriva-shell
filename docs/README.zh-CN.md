@@ -16,8 +16,19 @@ Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 niri 组合的现
 
 ```bash
 weyriva status
+weyriva diagnose
+weyriva diagnose --json
+sudo weyriva startup ensure
 weyriva ipc call weyriva.info
 weyriva plugin list
 ```
+
+`weyriva diagnose` 只检查 Niri 桌面链路：Niri 与运行时依赖、配置语法、Wayland
+会话入口、greetd 登录配置、用户服务和当前 Niri 会话。发现登录链路缺失时返回非零
+退出码，适合在 TTY 或脚本中直接使用。
+
+`sudo weyriva startup ensure` 用于确保整条启动链完整：校验 Niri 配置、备份并安装
+greetd 配置、备份已识别的旧 Weyriva 用户单元、保留用户自定义覆盖、刷新用户服务
+管理器并启用 greetd。该命令不会重启 greetd，也不会中断当前图形会话。
 
 协议、插件安全模型和项目边界请阅读 [IPC](IPC.md)、[插件](PLUGINS.md)、[架构](ARCHITECTURE.md) 与 [路线图](ROADMAP.md)。项目中的珊瑚色、奶油色与墨色 SVG 为原创视觉资产；项目与 Anthropic 不存在隶属、背书或官方设计关系。

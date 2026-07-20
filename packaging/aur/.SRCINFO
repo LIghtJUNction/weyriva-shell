@@ -1,0 +1,25 @@
+pkgbase = weyriva-shell-git
+	pkgdesc = A composed niri desktop environment with IPC and plugins (Git version)
+	pkgver = 0.1.0.r0.g0000000
+	pkgrel = 1
+	url = https://github.com/LIghtJUNction/weyriva-shell
+	arch = any
+	license = MIT
+	makedepends = git
+	depends = python
+	depends = niri
+	depends = waybar
+	depends = fuzzel
+	depends = mako
+	depends = swaybg
+	depends = greetd
+	depends = greetd-tuigreet
+	depends = foot
+	depends = noto-fonts
+	depends = ttf-nerd-fonts-symbols-mono
+	provides = weyriva-shell
+	conflicts = weyriva-shell
+	source = git+https://github.com/LIghtJUNction/weyriva-shell.git
+	sha256sums = SKIP
+
+pkgname = weyriva-shell-git

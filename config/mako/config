@@ -1,14 +1,14 @@
-font=Inter 11
-background-color=#fffaf3f2
-text-color=#292522
+font=Noto Sans 11
+background-color=#292522f5
+text-color=#fffaf3
 border-color=#ef6a5b
-border-size=2
-border-radius=12
-width=360
-height=140
-margin=16
-padding=16
-default-timeout=6000
+border-size=1
+border-radius=16
+width=380
+height=150
+margin=18
+padding=18
+default-timeout=5500
 icons=1
 max-icon-size=48
 

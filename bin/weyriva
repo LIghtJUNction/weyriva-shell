@@ -7,6 +7,7 @@ import argparse
 import fcntl
 import json
 import os
+import pwd
 import re
 import selectors
 import shutil
@@ -32,6 +33,24 @@ RESERVED_PREFIX: Final = "weyriva."
 MAX_HANDLERS: Final = 16
 READ_TIMEOUT: Final = 3.0
 PLUGIN_ID_PATTERN: Final = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
+RUNTIME_COMMANDS: Final = ("niri", "niri-session", "waybar", "fuzzel", "mako", "swaybg", "foot")
+PACKAGED_CONFIG_ROOT: Final = Path("/usr/share/weyriva/config")
+PACKAGED_UNIT_ROOT: Final = Path("/usr/lib/systemd/user")
+GREETD_TEMPLATE: Final = Path("/usr/share/weyriva/greetd/config.toml")
+GREETD_CONFIG: Final = Path("/etc/greetd/config.toml")
+SESSION_ENTRY: Final = Path("/usr/share/wayland-sessions/weyriva.desktop")
+WEYRIVA_UNITS: Final = (
+    "weyriva-ipc.service",
+    "weyriva-waybar.service",
+    "weyriva-mako.service",
+    "weyriva-wallpaper.service",
+)
+LEGACY_UNIT_MARKERS: Final = {
+    "weyriva-ipc.service": "ExecStart=%h/.local/bin/weyriva daemon",
+    "weyriva-waybar.service": "ExecStart=/usr/bin/waybar",
+    "weyriva-mako.service": "ExecStart=/usr/bin/mako",
+    "weyriva-wallpaper.service": "ExecStart=%h/.local/bin/weyriva wallpaper",
+}
 
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 
@@ -62,6 +81,295 @@ class PluginRegistry:
     methods: dict[str, PluginMethod]
     manifests: tuple[Path, ...]
     errors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiagnosticCheck:
+    name: str
+    status: str
+    detail: str
+
+
+def _diagnostic_command(name: str) -> str | None:
+    return shutil.which(name)
+
+
+def _diagnostic_check(name: str, status: str, detail: str) -> DiagnosticCheck:
+    return DiagnosticCheck(name=name, status=status, detail=detail)
+
+
+def _run_diagnostic_command(command: list[str], timeout: float = 5.0) -> tuple[int, str]:
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+        return 127, str(error)
+    output = (completed.stdout.strip() or completed.stderr.strip()).replace("\n", " ")
+    return completed.returncode, output
+
+
+def _config_home(environment: Mapping[str, str]) -> Path:
+    return Path(environment.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+
+
+def niri_config_path(environment: Mapping[str, str]) -> Path:
+    selected = environment.get("NIRI_CONFIG")
+    if selected:
+        return Path(selected).expanduser()
+    config_home = _config_home(environment)
+    user_config = config_home / "niri/config.kdl"
+    if user_config.is_file():
+        return user_config
+    return PACKAGED_CONFIG_ROOT / "niri/config.kdl"
+
+
+def component_argv(component: str, environment: Mapping[str, str]) -> list[str]:
+    config_home = _config_home(environment)
+    if component == "fuzzel":
+        user_config = config_home / "fuzzel/fuzzel.ini"
+        config = user_config if user_config.is_file() else PACKAGED_CONFIG_ROOT / "fuzzel/fuzzel.ini"
+        return ["fuzzel", "--config", str(config)]
+    if component == "mako":
+        user_config = config_home / "mako/config"
+        config = user_config if user_config.is_file() else PACKAGED_CONFIG_ROOT / "mako/config"
+        return ["mako", "--config", str(config)]
+    if component == "waybar":
+        user_root = config_home / "waybar"
+        packaged_root = PACKAGED_CONFIG_ROOT / "waybar"
+        user_config = user_root / "config.jsonc"
+        user_style = user_root / "style.css"
+        config = user_config if user_config.is_file() else packaged_root / "config.jsonc"
+        style = user_style if user_style.is_file() else packaged_root / "style.css"
+        return ["waybar", "--config", str(config), "--style", str(style)]
+    raise RuntimeError(f"unsupported component: {component}")
+
+
+def reconcile_startup_file(source: Path, destination: Path, backup: Path) -> bool:
+    if not source.is_file():
+        raise RuntimeError(f"required startup template is missing: {source}")
+    if destination.is_symlink():
+        raise RuntimeError(f"refusing to replace symlink: {destination}")
+    source_data = source.read_bytes()
+    if destination.is_file() and destination.read_bytes() == source_data:
+        return False
+    destination.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+    if destination.exists():
+        backup.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        shutil.copy2(destination, backup)
+    temporary = destination.with_name(f".{destination.name}.weyriva-{os.getpid()}.tmp")
+    try:
+        temporary.write_bytes(source_data)
+        temporary.chmod(0o644)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
+
+
+def legacy_user_units(unit_root: Path) -> tuple[str, ...]:
+    found: list[str] = []
+    for name, marker in LEGACY_UNIT_MARKERS.items():
+        unit = unit_root / name
+        if not unit.is_file() or unit.is_symlink():
+            continue
+        try:
+            content = unit.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        if marker in content:
+            found.append(name)
+    return tuple(found)
+
+
+def back_up_legacy_user_units(unit_root: Path, backup_root: Path) -> tuple[str, ...]:
+    moved: list[str] = []
+    for name in legacy_user_units(unit_root):
+        unit = unit_root / name
+        backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        shutil.move(str(unit), str(backup_root / name))
+        moved.append(name)
+    return tuple(moved)
+
+
+def _chown_tree(root: Path, uid: int, gid: int) -> None:
+    if not root.exists():
+        return
+    for path in (root, *root.rglob("*")):
+        os.chown(path, uid, gid, follow_symlinks=False)
+
+
+def _run_checked(command: list[str], description: str) -> None:
+    completed = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+        raise RuntimeError(f"{description} failed: {detail}")
+
+
+def ensure_startup_chain(target_user: str) -> int:
+    if os.geteuid() != 0:
+        raise RuntimeError("startup ensure requires root; run: sudo weyriva startup ensure")
+    if not target_user or target_user == "root":
+        raise RuntimeError("cannot infer the desktop user; use --user USER")
+    try:
+        account = pwd.getpwnam(target_user)
+    except KeyError as error:
+        raise RuntimeError(f"unknown user: {target_user}") from error
+
+    required = (SESSION_ENTRY, GREETD_TEMPLATE, PACKAGED_CONFIG_ROOT / "niri/config.kdl") + tuple(
+        PACKAGED_UNIT_ROOT / name for name in WEYRIVA_UNITS
+    )
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise RuntimeError("AUR installation is incomplete; missing: " + ", ".join(missing))
+    session_content = SESSION_ENTRY.read_text(encoding="utf-8", errors="replace")
+    if "Exec=/usr/bin/weyriva session start" not in session_content:
+        raise RuntimeError(f"invalid Weyriva session entry: {SESSION_ENTRY}")
+
+    user_home = Path(account.pw_dir)
+    user_environment = {
+        "HOME": str(user_home),
+        "XDG_CONFIG_HOME": str(user_home / ".config"),
+    }
+    config = niri_config_path(user_environment)
+    code, output = _run_diagnostic_command(["niri", "validate", "-c", str(config)])
+    if code != 0:
+        raise RuntimeError(f"Niri config is invalid ({config}): {output or 'validation failed'}")
+
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    backup_root = user_home / ".local/state/weyriva/startup-backups" / timestamp
+    greetd_backup = backup_root / "greetd/config.toml"
+    greetd_changed = reconcile_startup_file(GREETD_TEMPLATE, GREETD_CONFIG, greetd_backup)
+    unit_root = user_home / ".config/systemd/user"
+    moved_units = back_up_legacy_user_units(unit_root, backup_root / "systemd/user")
+    _chown_tree(backup_root, account.pw_uid, account.pw_gid)
+
+    _run_checked(["systemctl", "enable", "greetd.service"], "enabling greetd")
+    runtime_dir = f"/run/user/{account.pw_uid}"
+    _run_checked(
+        [
+            "runuser",
+            "-u",
+            target_user,
+            "--",
+            "env",
+            f"XDG_RUNTIME_DIR={runtime_dir}",
+            f"DBUS_SESSION_BUS_ADDRESS=unix:path={runtime_dir}/bus",
+            "systemctl",
+            "--user",
+            "daemon-reload",
+        ],
+        "reloading the user service manager",
+    )
+
+    print(f"Weyriva Niri startup chain ensured for {target_user}.")
+    print(f"Niri config: {config}")
+    print(f"greetd config: {'updated' if greetd_changed else 'already current'}")
+    if moved_units:
+        print("legacy user units backed up: " + ", ".join(moved_units))
+        print(f"backup directory: {backup_root}")
+    else:
+        print("legacy user units: none")
+    print("greetd was not restarted; log out or reboot when ready.")
+    return 0
+
+
+def diagnose_checks() -> tuple[DiagnosticCheck, ...]:
+    checks: list[DiagnosticCheck] = []
+    for command in RUNTIME_COMMANDS:
+        location = _diagnostic_command(command)
+        if location is None:
+            status = "fail" if command in {"niri", "niri-session"} else "warn"
+            checks.append(_diagnostic_check(f"command:{command}", status, "not installed"))
+        else:
+            checks.append(_diagnostic_check(f"command:{command}", "ok", location))
+
+    config = niri_config_path(os.environ)
+    if not config.is_file():
+        checks.append(_diagnostic_check("niri-config", "fail", f"missing: {config}"))
+    elif _diagnostic_command("niri") is None:
+        checks.append(_diagnostic_check("niri-config", "warn", f"not validated; niri is missing ({config})"))
+    else:
+        code, output = _run_diagnostic_command(["niri", "validate", "-c", str(config)])
+        checks.append(_diagnostic_check("niri-config", "ok" if code == 0 else "fail", output or str(config)))
+
+    desktop = SESSION_ENTRY
+    if not desktop.is_file():
+        checks.append(_diagnostic_check("session-entry", "fail", f"missing: {desktop}"))
+    else:
+        content = desktop.read_text(encoding="utf-8", errors="replace")
+        expected = "Exec=/usr/bin/weyriva session start"
+        checks.append(
+            _diagnostic_check("session-entry", "ok" if expected in content else "fail", str(desktop))
+        )
+
+    greetd = GREETD_CONFIG
+    if not greetd.is_file():
+        checks.append(_diagnostic_check("greetd", "warn", f"missing: {greetd}"))
+    else:
+        content = greetd.read_text(encoding="utf-8", errors="replace")
+        if "start-hyprland" in content or "agreety" in content:
+            checks.append(_diagnostic_check("greetd", "fail", "still points to Hyprland/agreety"))
+        elif "tuigreet" in content and "/usr/share/wayland-sessions" in content:
+            checks.append(_diagnostic_check("greetd", "ok", "tuigreet session picker is configured"))
+        else:
+            checks.append(_diagnostic_check("greetd", "warn", "configured, but Niri session selection is unclear"))
+
+    unit_root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd/user"
+    missing_units = [
+        name for name in WEYRIVA_UNITS
+        if not (unit_root / name).is_file() and not (PACKAGED_UNIT_ROOT / name).is_file()
+    ]
+    legacy_units = legacy_user_units(unit_root)
+    if missing_units:
+        checks.append(_diagnostic_check("user-services", "warn", "missing: " + ", ".join(missing_units)))
+    elif legacy_units:
+        checks.append(
+            _diagnostic_check(
+                "user-services",
+                "fail",
+                "legacy overrides: " + ", ".join(legacy_units) + "; run sudo weyriva startup ensure",
+            )
+        )
+    else:
+        overrides = [name for name in WEYRIVA_UNITS if (unit_root / name).is_file()]
+        detail = "packaged defaults"
+        if overrides:
+            detail += "; user overrides: " + ", ".join(overrides)
+        checks.append(_diagnostic_check("user-services", "ok", detail))
+
+    if os.environ.get("XDG_RUNTIME_DIR"):
+        code, output = _run_diagnostic_command(["systemctl", "--user", "is-system-running"], timeout=3)
+        if code == 0:
+            checks.append(_diagnostic_check("user-manager", "ok", output or "running"))
+        else:
+            checks.append(_diagnostic_check("user-manager", "warn", output or "unavailable"))
+    else:
+        checks.append(_diagnostic_check("user-manager", "warn", "XDG_RUNTIME_DIR is not set"))
+
+    if os.environ.get("NIRI_SOCKET"):
+        code, output = _run_diagnostic_command(["niri", "msg", "-j", "version"], timeout=3)
+        checks.append(_diagnostic_check("niri-session", "ok" if code == 0 else "warn", output or "running"))
+    else:
+        checks.append(_diagnostic_check("niri-session", "warn", "not running in this environment"))
+    return tuple(checks)
+
+
+def diagnostic_summary(checks: tuple[DiagnosticCheck, ...]) -> dict[str, JsonValue]:
+    return {
+        "desktop": "niri",
+        "ok": not any(check.status == "fail" for check in checks),
+        "checks": [
+            {"name": check.name, "status": check.status, "detail": check.detail} for check in checks
+        ],
+    }
+
+
+def print_diagnostics(checks: tuple[DiagnosticCheck, ...]) -> None:
+    symbols = {"ok": "OK", "warn": "WARN", "fail": "FAIL"}
+    for check in checks:
+        print(f"[{symbols[check.status]:4}] {check.name}: {check.detail}")
+    failures = sum(check.status == "fail" for check in checks)
+    warnings = sum(check.status == "warn" for check in checks)
+    print(f"\nNiri diagnosis: {failures} failure(s), {warnings} warning(s)")
 
 
 def xdg_runtime_dir() -> Path:
@@ -273,7 +581,7 @@ def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonVa
         case "weyriva.launcher.open":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "launcher.open takes no parameters")
-            return _spawn_fixed(["fuzzel"])
+            return _spawn_fixed(component_argv("fuzzel", os.environ))
         case "weyriva.notifications.dismiss_all":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "notifications.dismiss_all takes no parameters")
@@ -441,6 +749,12 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("daemon", help="run the user IPC daemon")
     commands.add_parser("status", help="check daemon status")
+    diagnose = commands.add_parser("diagnose", help="diagnose the Niri desktop and login path")
+    diagnose.add_argument("--json", action="store_true", help="print machine-readable JSON")
+    startup = commands.add_parser("startup", help="manage the Niri login and startup chain")
+    startup_commands = startup.add_subparsers(dest="startup_command", required=True)
+    ensure = startup_commands.add_parser("ensure", help="back up and repair the complete startup chain")
+    ensure.add_argument("--user", help="desktop user (defaults to SUDO_USER)")
     ipc = commands.add_parser("ipc", help="use the IPC protocol")
     ipc_commands = ipc.add_subparsers(dest="ipc_command", required=True)
     call = ipc_commands.add_parser("call", help="call an IPC method")
@@ -452,6 +766,8 @@ def build_parser() -> argparse.ArgumentParser:
     session = commands.add_parser("session", help="manage the desktop session")
     session_commands = session.add_subparsers(dest="session_command", required=True)
     session_commands.add_parser("start", help="start niri as the current session")
+    component = commands.add_parser("component", help="run a managed Niri desktop component")
+    component.add_argument("name", choices=("waybar", "mako", "fuzzel"))
     commands.add_parser("wallpaper", help="run the Weyriva wallpaper process")
     return parser
 
@@ -476,7 +792,18 @@ def session_environment(argv0: str, environment: Mapping[str, str]) -> dict[str,
 
 
 def start_session(argv0: str, environment: Mapping[str, str]) -> NoReturn:
-    os.execvpe("niri-session", ["niri-session"], session_environment(argv0, environment))
+    niri_session = _diagnostic_command("niri-session")
+    if niri_session is None:
+        raise RuntimeError("niri-session is not installed; install niri before starting the session")
+    config = niri_config_path(environment)
+    if _diagnostic_command("niri") is None:
+        raise RuntimeError("niri is not installed; install niri before starting the session")
+    code, output = _run_diagnostic_command(["niri", "validate", "-c", str(config)])
+    if code != 0:
+        raise RuntimeError(f"Niri config is invalid ({config}): {output or 'validation failed'}")
+    child_environment = session_environment(argv0, environment)
+    child_environment["NIRI_CONFIG"] = str(config)
+    os.execvpe("niri-session", ["niri-session"], child_environment)
     raise RuntimeError("niri-session exec unexpectedly returned")
 
 
@@ -489,6 +816,16 @@ def main(argv: list[str] | None = None) -> int:
             response = ipc_call("weyriva.ping", {})
             _print_json(response)
             return 0 if "result" in response else 1
+        if args.command == "diagnose":
+            checks = diagnose_checks()
+            if args.json:
+                _print_json(diagnostic_summary(checks))
+            else:
+                print_diagnostics(checks)
+            return 0 if not any(check.status == "fail" for check in checks) else 1
+        if args.command == "startup" and args.startup_command == "ensure":
+            target_user = args.user or os.environ.get("SUDO_USER", "")
+            return ensure_startup_chain(target_user)
         if args.command == "ipc" and args.ipc_command == "call":
             response = ipc_call(args.method, args.params)
             _print_json(response)
@@ -496,6 +833,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "plugin" and args.plugin_command == "list":
             _print_json(plugin_summary(discover_plugins()))
             return 0
+        if args.command == "component":
+            command = component_argv(args.name, os.environ)
+            os.execvp(command[0], command)
         if args.command == "session" and args.session_command == "start":
             start_session(sys.argv[0], os.environ)
         if args.command == "wallpaper":

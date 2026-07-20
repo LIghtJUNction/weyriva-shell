@@ -4,7 +4,7 @@ Weyriva is deliberately composed from established Wayland components. In a syste
 
 The control plane is one Python 3 standard-library executable. It does not manage windows itself and has no elevated component. The daemon binds a per-user socket beneath `XDG_RUNTIME_DIR`, dispatches a small reserved `weyriva.*` method set, and then dispatches validated plugin methods. Desktop actions use fixed argument arrays and never a shell.
 
-Configuration is split by upstream component under `config/`. User installation mirrors those trees into XDG homes. AUR packaging puts niri's fallback at `/etc/niri/config.kdl`, other defaults under `/etc/xdg`, shared assets under `/usr/share`, and units under `/usr/lib/systemd/user`. greetd remains a separately reviewed system action and its config is packaged only as a template.
+Configuration is split by upstream component under `config/`. User installation mirrors those trees into XDG homes. AUR packaging keeps all Weyriva defaults under `/usr/share/weyriva/config` instead of claiming paths owned by upstream packages. The CLI selects a user file under `XDG_CONFIG_HOME` when present and otherwise falls back to the packaged default, so package updates never overwrite user customization. Shared assets live under `/usr/share`, and units under `/usr/lib/systemd/user`. greetd remains a separately reviewed system action and its config is packaged only as a template.
 
 ## Invariants
 

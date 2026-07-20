@@ -1,19 +1,24 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 36,
-  "spacing": 8,
+  "height": 52,
+  "spacing": 0,
+  "margin-top": 10,
+  "margin-left": 14,
+  "margin-right": 14,
   "modules-left": ["niri/workspaces", "niri/window"],
   "modules-center": ["clock"],
   "modules-right": ["network", "pulseaudio", "battery", "tray"],
   "niri/workspaces": {
     "format": "{icon}",
-    "format-icons": {"active": "●", "default": "○"}
+    "format-icons": {"active": "●", "default": "○"},
+    "all-outputs": true,
+    "sort-by-number": true
   },
-  "niri/window": {"max-length": 60},
-  "clock": {"format": "{:%a %d · %H:%M}", "tooltip-format": "{calendar}"},
-  "network": {"format-wifi": "󰤨  {signalStrength}%", "format-ethernet": "󰈀", "format-disconnected": "󰤭"},
-  "pulseaudio": {"format": "{icon}  {volume}%", "format-muted": "󰖁", "format-icons": ["󰕿", "󰖀", "󰕾"]},
-  "battery": {"format": "{icon}  {capacity}%", "format-charging": "󰂄 {capacity}%", "format-icons": ["󰂎", "󰁺", "󰁼", "󰁾", "󰂀", "󰂂", "󰁹"]},
-  "tray": {"spacing": 10}
+  "niri/window": {"max-length": 48, "icon": true, "format": "{title}"},
+  "clock": {"format": "{:%a  ·  %d %b  ·  %H:%M}", "tooltip-format": "{calendar}"},
+  "network": {"format-wifi": "󰤨  {signalStrength}%", "format-ethernet": "󰈀  wired", "format-disconnected": "󰤭  offline", "tooltip-format": "{ifname}: {essid}"},
+  "pulseaudio": {"format": "{icon}  {volume}%", "format-muted": "󰖁  muted", "format-icons": ["󰕿", "󰖀", "󰕾"], "scroll-step": 5},
+  "battery": {"format": "{icon}  {capacity}%", "format-charging": "󰂄  {capacity}%", "format-icons": ["󰂎", "󰁺", "󰁼", "󰁾", "󰂀", "󰂂", "󰁹"]},
+  "tray": {"spacing": 8}
 }

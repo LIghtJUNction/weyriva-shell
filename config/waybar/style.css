@@ -3,19 +3,20 @@
 @define-color ink #292522;
 @define-color muted #716964;
 @define-color coral #ef6a5b;
+@define-color coral_deep #c95047;
+@define-color line alpha(@ink, 0.10);
 
 * {
   border: none;
   border-radius: 0;
-  font-family: "Inter", "Symbols Nerd Font Mono", "Noto Sans", sans-serif;
-  font-size: 13px;
+  font-family: "Noto Sans", "Symbols Nerd Font Mono", sans-serif;
+  font-size: 12px;
   min-height: 0;
 }
 
 window#waybar {
-  background: alpha(@cream, 0.94);
+  background: transparent;
   color: @ink;
-  border-bottom: 1px solid alpha(@ink, 0.12);
 }
 
 #workspaces,
@@ -25,11 +26,21 @@ window#waybar {
 #pulseaudio,
 #battery,
 #tray {
-  padding: 0 12px;
-  margin: 5px 0;
+  background: alpha(@paper, 0.94);
+  padding: 0 14px;
+  margin: 5px 3px;
+  border: 1px solid @line;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px alpha(@ink, 0.10), inset 0 1px alpha(#ffffff, 0.8);
 }
 
-#workspaces button { color: @muted; padding: 0 5px; }
-#workspaces button.active { color: @coral; }
-#clock { background: @paper; border-radius: 10px; font-weight: 600; }
-#battery.warning:not(.charging) { color: @coral; }
+#workspaces { padding: 0 8px; background: alpha(@ink, 0.96); color: @cream; border-color: alpha(@ink, 0.15); }
+#workspaces button { color: alpha(@cream, 0.45); padding: 0 7px; margin: 3px 1px; border-radius: 12px; transition: color 500ms cubic-bezier(0.32, 0.72, 0, 1), background 500ms cubic-bezier(0.32, 0.72, 0, 1); }
+#workspaces button:hover { color: @cream; background: alpha(@cream, 0.12); }
+#workspaces button.active { color: @ink; background: @coral; }
+#window { color: @muted; font-weight: 500; min-width: 180px; }
+#clock { padding-left: 18px; padding-right: 18px; font-weight: 700; letter-spacing: 0.04em; }
+#clock:hover, #network:hover, #pulseaudio:hover, #battery:hover, #tray:hover { background: @paper; color: @coral_deep; }
+#battery.warning:not(.charging), #battery.critical:not(.charging) { color: @coral_deep; }
+#battery.charging { color: #5f7f62; }
+#tray { padding-left: 10px; padding-right: 10px; }
