@@ -29,8 +29,13 @@ while IFS=$'\t' read -r installed_hash destination; do
 done <"$STATE_FILE"
 
 if [[ $APPLY -eq 1 ]]; then
-    chmod 0600 "$NEXT_STATE"
-    mv "$NEXT_STATE" "$STATE_FILE"
+    if [[ -s $NEXT_STATE ]]; then
+        chmod 0600 "$NEXT_STATE"
+        mv "$NEXT_STATE" "$STATE_FILE"
+    else
+        rm -f "$NEXT_STATE" "$STATE_FILE"
+        printf '%s\n' "state manifest removed; no managed files remain"
+    fi
 fi
 
 if [[ $APPLY -ne 1 ]]; then printf '%s\n' "Dry-run only. Re-run with --apply to remove only unchanged Weyriva files."; fi

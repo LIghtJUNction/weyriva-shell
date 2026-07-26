@@ -194,6 +194,10 @@ def legacy_user_units(unit_root: Path) -> tuple[str, ...]:
     return tuple(found)
 
 
+def legacy_override_units(unit_root: Path) -> tuple[str, ...]:
+    return tuple(name for name in legacy_user_units(unit_root) if (PACKAGED_UNIT_ROOT / name).is_file())
+
+
 def back_up_legacy_user_units(unit_root: Path, backup_root: Path) -> tuple[str, ...]:
     moved: list[str] = []
     for name in legacy_user_units(unit_root):
@@ -332,7 +336,7 @@ def diagnose_checks() -> tuple[DiagnosticCheck, ...]:
         name for name in WEYRIVA_UNITS
         if not (unit_root / name).is_file() and not (PACKAGED_UNIT_ROOT / name).is_file()
     ]
-    legacy_units = legacy_user_units(unit_root)
+    legacy_units = legacy_override_units(unit_root)
     if missing_units:
         checks.append(_diagnostic_check("user-services", "warn", "missing: " + ", ".join(missing_units)))
     elif legacy_units:
@@ -704,8 +708,10 @@ class RequestHandler(socketserver.StreamRequestHandler):
         self.request.settimeout(READ_TIMEOUT)
         try:
             line = self.rfile.readline(MAX_REQUEST_BYTES + 1)
+            if not line:
+                return
             self.wfile.write(process_line(line, self.server.registry))  # type: ignore[attr-defined]
-        except socket.timeout:
+        except (socket.timeout, BrokenPipeError, ConnectionResetError):
             return
 
 

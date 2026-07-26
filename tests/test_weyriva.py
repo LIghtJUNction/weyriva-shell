@@ -176,6 +176,20 @@ class SessionLifecycleTests(unittest.TestCase):
             self.assertEqual(backup.read_text(), "old\n")
             self.assertFalse(weyriva.reconcile_startup_file(source, destination, backup))
 
+    def test_source_install_units_are_not_legacy_without_packaged_units(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            unit_root = root / ".config/systemd/user"
+            unit_root.mkdir(parents=True)
+            for name, marker in weyriva.LEGACY_UNIT_MARKERS.items():
+                (unit_root / name).write_text(f"[Service]\n{marker}\n")
+            packaged = root / "usr/lib/systemd/user"
+            with mock.patch.object(weyriva, "PACKAGED_UNIT_ROOT", packaged):
+                self.assertEqual(weyriva.legacy_override_units(unit_root), ())
+                packaged.mkdir(parents=True)
+                (packaged / "weyriva-ipc.service").write_text("[Service]\nExecStart=/usr/bin/weyriva daemon\n")
+                self.assertEqual(weyriva.legacy_override_units(unit_root), ("weyriva-ipc.service",))
+
     def test_legacy_user_units_are_backed_up_but_custom_units_are_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
