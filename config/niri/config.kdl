@@ -8,8 +8,19 @@ layout {
     gaps 16
     center-focused-column "never"
     default-column-width { proportion 0.55; }
-    focus-ring { width 3; active-color "#ef6a5b"; inactive-color "#29252240"; }
+    focus-ring {
+        width 3
+        active-gradient from="#f7897b" to="#c95047" angle=135
+        inactive-color "#29252240"
+    }
     border { off; }
+    shadow {
+        on
+        softness 24
+        spread 4
+        offset x=0 y=6
+        color "#2925224d"
+    }
 }
 
 cursor { xcursor-theme "Adwaita"; xcursor-size 24; }
@@ -41,7 +52,7 @@ binds {
 }
 
 window-rule {
-    geometry-corner-radius 16
+    geometry-corner-radius 20
     clip-to-geometry true
 }
 
