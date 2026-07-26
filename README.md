@@ -63,6 +63,9 @@ weyriva ipc call weyriva.launcher.open
 weyriva ipc call weyriva.notifications.dnd
 weyriva ipc call weyriva.panel.toggle
 weyriva plugin list
+weyriva plugin validate examples/plugins/hello.json
+weyriva plugin reload
+weyriva ipc call weyriva.niri.outputs
 weyriva wallpaper set ~/Pictures/wallpaper.png
 weyriva wallpaper status
 weyriva wallpaper reset

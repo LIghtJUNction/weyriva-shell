@@ -21,7 +21,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Final, NoReturn, TextIO
 
 VERSION: Final = "0.1.0"
@@ -56,11 +56,14 @@ BUILTIN_METHODS: Final = (
     "weyriva.info",
     "weyriva.methods",
     "weyriva.plugin.list",
+    "weyriva.plugin.reload",
     "weyriva.launcher.open",
     "weyriva.notifications.dismiss_all",
     "weyriva.notifications.dnd",
     "weyriva.panel.toggle",
     "weyriva.panel.reload",
+    "weyriva.niri.outputs",
+    "weyriva.niri.windows",
 )
 WALLPAPER_FILE: Final = "weyriva-coral.svg"
 WALLPAPER_SERVICE: Final = "weyriva-wallpaper.service"
@@ -572,6 +575,25 @@ def run_plugin(method: PluginMethod, params: JsonValue) -> JsonValue:
         raise PluginError("plugin stdout is not one JSON value") from error
 
 
+def validate_manifest(path: Path) -> dict[str, JsonValue]:
+    if not path.is_file():
+        raise PluginError(f"manifest file does not exist: {path}")
+    plugin_id, methods = _parse_plugin(path)
+    missing = sorted(
+        {
+            method.argv[0]
+            for method in methods.values()
+            if "/" in method.argv[0] and not Path(method.argv[0]).is_file()
+        }
+    )
+    return {
+        "id": plugin_id,
+        "manifest": str(path),
+        "methods": sorted(methods),
+        "missing_executables": missing,
+    }
+
+
 def plugin_summary(registry: PluginRegistry) -> dict[str, JsonValue]:
     return {
         "plugins": [str(path) for path in registry.manifests],
@@ -601,6 +623,21 @@ def _makoctl_mode(arguments: list[str]) -> dict[str, JsonValue]:
     return {"dnd": "dnd" in modes, "modes": modes}
 
 
+def _niri_json(arguments: list[str]) -> JsonValue:
+    try:
+        completed = subprocess.run(
+            ["niri", "msg", "-j", *arguments], capture_output=True, text=True, timeout=3, check=False
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+        raise ProtocolError("unavailable", f"niri msg unavailable: {error}") from error
+    if completed.returncode != 0:
+        raise ProtocolError("action_failed", completed.stderr.strip() or "niri msg failed")
+    try:
+        return json.loads(completed.stdout)
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise ProtocolError("action_failed", "niri msg returned invalid JSON") from error
+
+
 def _signal_waybar(signal_flag: str) -> None:
     try:
         completed = subprocess.run(
@@ -618,7 +655,12 @@ def _signal_waybar(signal_flag: str) -> None:
         raise ProtocolError("action_failed", completed.stderr.strip() or "pkill failed")
 
 
-def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonValue:
+def dispatch(
+    method: str,
+    params: JsonValue,
+    registry: PluginRegistry,
+    reloader: Callable[[], PluginRegistry] | None = None,
+) -> JsonValue:
     match method:
         case "weyriva.ping":
             return {"pong": True, "protocol": PROTOCOL_VERSION}
@@ -628,6 +670,12 @@ def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonVa
             return {"builtin": list(BUILTIN_METHODS), "plugin": sorted(registry.methods)}
         case "weyriva.plugin.list":
             return plugin_summary(registry)
+        case "weyriva.plugin.reload":
+            if params not in ({}, None):
+                raise ProtocolError("invalid_params", "plugin.reload takes no parameters")
+            if reloader is None:
+                raise ProtocolError("unavailable", "plugin reload requires the running daemon")
+            return plugin_summary(reloader())
         case "weyriva.launcher.open":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "launcher.open takes no parameters")
@@ -660,6 +708,14 @@ def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonVa
                 raise ProtocolError("invalid_params", "panel.reload takes no parameters")
             _signal_waybar("-USR2")
             return {"reloaded": True}
+        case "weyriva.niri.outputs":
+            if params not in ({}, None):
+                raise ProtocolError("invalid_params", "niri.outputs takes no parameters")
+            return _niri_json(["outputs"])
+        case "weyriva.niri.windows":
+            if params not in ({}, None):
+                raise ProtocolError("invalid_params", "niri.windows takes no parameters")
+            return _niri_json(["windows"])
         case _ if method in registry.methods:
             try:
                 return run_plugin(registry.methods[method], params)
@@ -669,7 +725,11 @@ def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonVa
             raise ProtocolError("method_not_found", f"unknown method: {method}")
 
 
-def process_request(document: JsonValue, registry: PluginRegistry) -> dict[str, JsonValue]:
+def process_request(
+    document: JsonValue,
+    registry: PluginRegistry,
+    reloader: Callable[[], PluginRegistry] | None = None,
+) -> dict[str, JsonValue]:
     request_id: JsonValue = None
     try:
         if not isinstance(document, dict):
@@ -683,12 +743,16 @@ def process_request(document: JsonValue, registry: PluginRegistry) -> dict[str, 
         if not isinstance(method, str) or not method:
             raise ProtocolError("invalid_request", "method must be a non-empty string")
         params: JsonValue = document.get("params", {})
-        return {"id": request_id, "result": dispatch(method, params, registry)}
+        return {"id": request_id, "result": dispatch(method, params, registry, reloader)}
     except ProtocolError as error:
         return {"id": request_id, "error": {"code": error.code, "message": str(error)}}
 
 
-def process_line(line: bytes, registry: PluginRegistry) -> bytes:
+def process_line(
+    line: bytes,
+    registry: PluginRegistry,
+    reloader: Callable[[], PluginRegistry] | None = None,
+) -> bytes:
     if len(line) > MAX_REQUEST_BYTES or not line.endswith(b"\n"):
         response: dict[str, JsonValue] = {
             "id": None,
@@ -697,7 +761,7 @@ def process_line(line: bytes, registry: PluginRegistry) -> bytes:
     else:
         try:
             document: JsonValue = json.loads(line)
-            response = process_request(document, registry)
+            response = process_request(document, registry, reloader)
         except (UnicodeError, json.JSONDecodeError):
             response = {"id": None, "error": {"code": "parse_error", "message": "invalid JSON"}}
     return json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode() + b"\n"
@@ -710,7 +774,8 @@ class RequestHandler(socketserver.StreamRequestHandler):
             line = self.rfile.readline(MAX_REQUEST_BYTES + 1)
             if not line:
                 return
-            self.wfile.write(process_line(line, self.server.registry))  # type: ignore[attr-defined]
+            server: IpcServer = self.server  # type: ignore[assignment]
+            self.wfile.write(process_line(line, server.registry, server.reload_plugins))
         except (socket.timeout, BrokenPipeError, ConnectionResetError):
             return
 
@@ -723,6 +788,11 @@ class IpcServer(socketserver.ThreadingUnixStreamServer):
         self.registry = registry
         self._handler_slots = threading.BoundedSemaphore(MAX_HANDLERS)
         super().__init__(path, RequestHandler)
+
+    def reload_plugins(self) -> PluginRegistry:
+        registry = discover_plugins()
+        self.registry = registry
+        return registry
 
     def verify_request(self, request: socket.socket, client_address: object) -> bool:
         if self._handler_slots.acquire(blocking=False):
@@ -900,6 +970,9 @@ def build_parser() -> argparse.ArgumentParser:
     plugin = commands.add_parser("plugin", help="inspect trusted local plugins")
     plugin_commands = plugin.add_subparsers(dest="plugin_command", required=True)
     plugin_commands.add_parser("list", help="list discovered plugin methods")
+    plugin_commands.add_parser("reload", help="ask the running daemon to rescan plugin manifests")
+    plugin_validate = plugin_commands.add_parser("validate", help="validate one plugin manifest file")
+    plugin_validate.add_argument("path", help="path to the manifest JSON file")
     session = commands.add_parser("session", help="manage the desktop session")
     session_commands = session.add_subparsers(dest="session_command", required=True)
     session_commands.add_parser("start", help="start niri as the current session")
@@ -974,6 +1047,17 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if "result" in response else 1
         if args.command == "plugin" and args.plugin_command == "list":
             _print_json(plugin_summary(discover_plugins()))
+            return 0
+        if args.command == "plugin" and args.plugin_command == "reload":
+            response = ipc_call("weyriva.plugin.reload", {})
+            _print_json(response)
+            return 0 if "result" in response else 1
+        if args.command == "plugin" and args.plugin_command == "validate":
+            try:
+                _print_json(validate_manifest(Path(args.path).expanduser()))
+            except PluginError as error:
+                print(f"weyriva: invalid manifest: {error}", file=sys.stderr)
+                return 1
             return 0
         if args.command == "component":
             command = component_argv(args.name, os.environ)

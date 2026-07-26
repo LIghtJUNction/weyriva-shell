@@ -7,6 +7,7 @@
 - Versioned local IPC with bounded framing and structured errors
 - Explicit trusted-plugin manifests, timeout enforcement, and tests
 - Session control methods: do-not-disturb, panel toggle/reload, method introspection, and per-user wallpaper overrides
+- Plugin lifecycle tooling: manifest validation, live daemon reload, and niri output/window queries over IPC
 - Digest-tracked, preservation-first user installer and separate greetd template installer
 - `weyriva-shell-git` AUR packaging scaffold and CI checks
 

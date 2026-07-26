@@ -27,7 +27,9 @@ Manifest `version` must be integer `1`. IDs must match `[a-z][a-z0-9-]{1,63}`, a
 
 For each call, the daemon writes `params` as JSON to stdin. The plugin must exit zero and write exactly one JSON value to stdout. Stderr is reported on failure. Stdout and stderr are read incrementally with 1 MiB and 64 KiB limits; timeout or overflow terminates the plugin process group. No shell evaluates the command.
 
-To try the harmless example, copy both `examples/plugins/hello.json` and its `hello/` directory into your user plugin directory, restart the daemon, then call:
+Check a manifest before installing it with `weyriva plugin validate path/to/manifest.json`; it reports the parsed methods and any referenced executables that do not exist yet, and fails with the exact rejection reason otherwise.
+
+To try the harmless example, copy both `examples/plugins/hello.json` and its `hello/` directory into your user plugin directory, run `weyriva plugin reload` (or restart the daemon), then call:
 
 ```bash
 weyriva ipc call example.hello --params '{"name":"Weyriva"}'

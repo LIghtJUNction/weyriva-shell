@@ -23,9 +23,17 @@ weyriva ipc call weyriva.info
 weyriva ipc call weyriva.notifications.dnd
 weyriva ipc call weyriva.panel.toggle
 weyriva plugin list
+weyriva plugin validate examples/plugins/hello.json
+weyriva plugin reload
+weyriva ipc call weyriva.niri.outputs
 weyriva wallpaper set ~/Pictures/wallpaper.png
 weyriva wallpaper status
 ```
+
+`weyriva plugin validate` 在安装前校验插件清单并列出缺失的可执行文件;
+`weyriva plugin reload` 让运行中的守护进程重新扫描插件清单,无需重启。
+`weyriva.niri.outputs` 与 `weyriva.niri.windows` 通过统一 socket 返回 niri
+的显示器与窗口 JSON 状态,便于面板和脚本使用。
 
 `weyriva.notifications.dnd` 切换 mako 勿扰模式(默认绑定 Mod+N),也可用
 `--params '{"enabled": true}'` 显式开关;`weyriva.panel.toggle` 隐藏或显示

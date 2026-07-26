@@ -402,6 +402,60 @@ class ControlMethodTests(unittest.TestCase):
                 weyriva.dispatch("weyriva.panel.toggle", {}, self.registry)
         self.assertEqual(raised.exception.code, "unavailable")
 
+    def test_plugin_reload_swaps_registry_through_reloader(self) -> None:
+        fresh = weyriva.PluginRegistry({}, (), ("broken.json: cannot read JSON",))
+        result = weyriva.dispatch("weyriva.plugin.reload", {}, self.registry, reloader=lambda: fresh)
+        self.assertEqual(result, weyriva.plugin_summary(fresh))
+
+    def test_plugin_reload_requires_daemon_context(self) -> None:
+        with self.assertRaises(weyriva.ProtocolError) as raised:
+            weyriva.dispatch("weyriva.plugin.reload", {}, self.registry)
+        self.assertEqual(raised.exception.code, "unavailable")
+
+    def test_niri_queries_parse_json_and_report_missing_niri(self) -> None:
+        payload = '[{"name": "eDP-1", "logical": {"width": 2256}}]'
+        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed(stdout=payload)) as run:
+            result = weyriva.dispatch("weyriva.niri.outputs", {}, self.registry)
+        self.assertEqual(run.call_args.args[0], ["niri", "msg", "-j", "outputs"])
+        self.assertEqual(result[0]["name"], "eDP-1")
+        with mock.patch.object(weyriva.subprocess, "run", side_effect=FileNotFoundError("niri")):
+            with self.assertRaises(weyriva.ProtocolError) as raised:
+                weyriva.dispatch("weyriva.niri.windows", {}, self.registry)
+        self.assertEqual(raised.exception.code, "unavailable")
+
+    def test_validate_manifest_reports_methods_and_missing_executables(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = root / "demo.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "id": "demo",
+                        "version": 1,
+                        "methods": {
+                            "demo.here": {"argv": ["true"]},
+                            "demo.gone": {"argv": ["./missing.py"]},
+                        },
+                    }
+                )
+            )
+            summary = weyriva.validate_manifest(manifest)
+            self.assertEqual(summary["id"], "demo")
+            self.assertEqual(summary["methods"], ["demo.gone", "demo.here"])
+            self.assertEqual(summary["missing_executables"], [str(root / "missing.py")])
+            manifest.write_text("{not json")
+            with self.assertRaises(weyriva.PluginError):
+                weyriva.validate_manifest(manifest)
+            with self.assertRaisesRegex(weyriva.PluginError, "does not exist"):
+                weyriva.validate_manifest(root / "absent.json")
+
+    def test_plugin_parser_supports_reload_and_validate(self) -> None:
+        arguments = weyriva.build_parser().parse_args(["plugin", "reload"])
+        self.assertEqual(arguments.plugin_command, "reload")
+        arguments = weyriva.build_parser().parse_args(["plugin", "validate", "demo.json"])
+        self.assertEqual(arguments.plugin_command, "validate")
+        self.assertEqual(arguments.path, "demo.json")
+
 
 class WallpaperTests(unittest.TestCase):
     def test_resolution_prefers_override_then_default(self) -> None:
