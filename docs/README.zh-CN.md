@@ -20,8 +20,18 @@ weyriva diagnose
 weyriva diagnose --json
 sudo weyriva startup ensure
 weyriva ipc call weyriva.info
+weyriva ipc call weyriva.notifications.dnd
+weyriva ipc call weyriva.panel.toggle
 weyriva plugin list
+weyriva wallpaper set ~/Pictures/wallpaper.png
+weyriva wallpaper status
 ```
+
+`weyriva.notifications.dnd` 切换 mako 勿扰模式(默认绑定 Mod+N),也可用
+`--params '{"enabled": true}'` 显式开关;`weyriva.panel.toggle` 隐藏或显示
+Waybar(默认绑定 Mod+B),`weyriva.panel.reload` 重载其配置。
+`weyriva wallpaper set` 在用户 XDG 配置下记录自定义壁纸并在用户服务可用时
+自动重启壁纸服务,`reset` 恢复自带壁纸。
 
 `weyriva diagnose` 只检查 Niri 桌面链路：Niri 与运行时依赖、配置语法、Wayland
 会话入口、greetd 登录配置、用户服务和当前 Niri 会话。发现登录链路缺失时返回非零

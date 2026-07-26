@@ -51,6 +51,20 @@ LEGACY_UNIT_MARKERS: Final = {
     "weyriva-mako.service": "ExecStart=/usr/bin/mako",
     "weyriva-wallpaper.service": "ExecStart=%h/.local/bin/weyriva wallpaper",
 }
+BUILTIN_METHODS: Final = (
+    "weyriva.ping",
+    "weyriva.info",
+    "weyriva.methods",
+    "weyriva.plugin.list",
+    "weyriva.launcher.open",
+    "weyriva.notifications.dismiss_all",
+    "weyriva.notifications.dnd",
+    "weyriva.panel.toggle",
+    "weyriva.panel.reload",
+)
+WALLPAPER_FILE: Final = "weyriva-coral.svg"
+WALLPAPER_SERVICE: Final = "weyriva-wallpaper.service"
+PACKAGED_WALLPAPER_ROOT: Final = Path("/usr/share/weyriva/wallpapers")
 
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 
@@ -570,12 +584,44 @@ def _spawn_fixed(command: list[str]) -> dict[str, JsonValue]:
     return {"pid": process.pid, "command": command[0]}
 
 
+def _makoctl_mode(arguments: list[str]) -> dict[str, JsonValue]:
+    try:
+        completed = subprocess.run(
+            ["makoctl", "mode", *arguments], capture_output=True, text=True, timeout=2, check=False
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+        raise ProtocolError("unavailable", f"makoctl unavailable: {error}") from error
+    if completed.returncode != 0:
+        raise ProtocolError("action_failed", completed.stderr.strip() or "makoctl failed")
+    modes = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    return {"dnd": "dnd" in modes, "modes": modes}
+
+
+def _signal_waybar(signal_flag: str) -> None:
+    try:
+        completed = subprocess.run(
+            ["pkill", signal_flag, "-x", "-u", str(os.getuid()), "waybar"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+        raise ProtocolError("unavailable", f"pkill unavailable: {error}") from error
+    if completed.returncode == 1:
+        raise ProtocolError("unavailable", "waybar is not running")
+    if completed.returncode != 0:
+        raise ProtocolError("action_failed", completed.stderr.strip() or "pkill failed")
+
+
 def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonValue:
     match method:
         case "weyriva.ping":
             return {"pong": True, "protocol": PROTOCOL_VERSION}
         case "weyriva.info":
             return {"name": "Weyriva Shell", "version": VERSION, "protocol": PROTOCOL_VERSION}
+        case "weyriva.methods":
+            return {"builtin": list(BUILTIN_METHODS), "plugin": sorted(registry.methods)}
         case "weyriva.plugin.list":
             return plugin_summary(registry)
         case "weyriva.launcher.open":
@@ -594,6 +640,22 @@ def dispatch(method: str, params: JsonValue, registry: PluginRegistry) -> JsonVa
             if completed.returncode != 0:
                 raise ProtocolError("action_failed", completed.stderr.strip() or "makoctl failed")
             return {"dismissed": True}
+        case "weyriva.notifications.dnd":
+            if params in ({}, None):
+                return _makoctl_mode(["-t", "dnd"])
+            if isinstance(params, dict) and set(params) == {"enabled"} and isinstance(params["enabled"], bool):
+                return _makoctl_mode(["-a" if params["enabled"] else "-r", "dnd"])
+            raise ProtocolError("invalid_params", 'notifications.dnd takes no parameters or {"enabled": bool}')
+        case "weyriva.panel.toggle":
+            if params not in ({}, None):
+                raise ProtocolError("invalid_params", "panel.toggle takes no parameters")
+            _signal_waybar("-USR1")
+            return {"toggled": True}
+        case "weyriva.panel.reload":
+            if params not in ({}, None):
+                raise ProtocolError("invalid_params", "panel.reload takes no parameters")
+            _signal_waybar("-USR2")
+            return {"reloaded": True}
         case _ if method in registry.methods:
             try:
                 return run_plugin(registry.methods[method], params)
@@ -736,6 +798,75 @@ def ipc_call(method: str, params: JsonValue, timeout: float = DEFAULT_TIMEOUT) -
     return parsed
 
 
+def wallpaper_override_path(environment: Mapping[str, str]) -> Path:
+    return _config_home(environment) / "weyriva/wallpaper.path"
+
+
+def resolve_wallpaper(environment: Mapping[str, str]) -> tuple[Path | None, str]:
+    override = wallpaper_override_path(environment)
+    if override.is_file():
+        recorded = override.read_text(encoding="utf-8").strip()
+        if recorded:
+            selected = Path(recorded)
+            return (selected, "user") if selected.is_file() else (selected, "broken")
+    data_home = Path(environment.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    candidates = (
+        data_home / "weyriva/wallpapers" / WALLPAPER_FILE,
+        PACKAGED_WALLPAPER_ROOT / WALLPAPER_FILE,
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate, "default"
+    return None, "missing"
+
+
+def wallpaper_summary(environment: Mapping[str, str]) -> dict[str, JsonValue]:
+    wallpaper, source = resolve_wallpaper(environment)
+    return {"wallpaper": None if wallpaper is None else str(wallpaper), "source": source}
+
+
+def run_wallpaper(environment: Mapping[str, str]) -> NoReturn:
+    wallpaper, source = resolve_wallpaper(environment)
+    if source == "broken":
+        raise RuntimeError(f"configured wallpaper is missing: {wallpaper}; run 'weyriva wallpaper reset'")
+    if wallpaper is None:
+        raise RuntimeError("Weyriva wallpaper is not installed")
+    os.execvp("swaybg", ["swaybg", "-m", "fill", "-i", str(wallpaper)])
+    raise RuntimeError("swaybg exec unexpectedly returned")
+
+
+def _restart_wallpaper_service() -> str:
+    if not os.environ.get("XDG_RUNTIME_DIR") or shutil.which("systemctl") is None:
+        return "wallpaper service not restarted; no user service manager here"
+    code, output = _run_diagnostic_command(["systemctl", "--user", "try-restart", WALLPAPER_SERVICE], timeout=5)
+    if code != 0:
+        return f"wallpaper service restart failed: {output or code}"
+    return f"{WALLPAPER_SERVICE} restarted if it was active"
+
+
+def set_wallpaper(argument: str, environment: Mapping[str, str]) -> int:
+    selected = Path(argument).expanduser().resolve()
+    if not selected.is_file():
+        raise RuntimeError(f"wallpaper image does not exist: {selected}")
+    override = wallpaper_override_path(environment)
+    override.parent.mkdir(parents=True, exist_ok=True)
+    override.write_text(f"{selected}\n", encoding="utf-8")
+    print(f"wallpaper set: {selected}")
+    print(_restart_wallpaper_service())
+    return 0
+
+
+def reset_wallpaper(environment: Mapping[str, str]) -> int:
+    override = wallpaper_override_path(environment)
+    if override.is_file():
+        override.unlink()
+        print("wallpaper override removed; packaged default restored")
+    else:
+        print("no wallpaper override was set")
+    print(_restart_wallpaper_service())
+    return 0
+
+
 def _json_argument(value: str) -> JsonValue:
     try:
         return json.loads(value)
@@ -768,7 +899,12 @@ def build_parser() -> argparse.ArgumentParser:
     session_commands.add_parser("start", help="start niri as the current session")
     component = commands.add_parser("component", help="run a managed Niri desktop component")
     component.add_argument("name", choices=("waybar", "mako", "fuzzel"))
-    commands.add_parser("wallpaper", help="run the Weyriva wallpaper process")
+    wallpaper = commands.add_parser("wallpaper", help="run or configure the Weyriva wallpaper")
+    wallpaper_commands = wallpaper.add_subparsers(dest="wallpaper_command")
+    wallpaper_set = wallpaper_commands.add_parser("set", help="use a custom wallpaper image")
+    wallpaper_set.add_argument("path", help="path to the wallpaper image file")
+    wallpaper_commands.add_parser("reset", help="remove the custom wallpaper override")
+    wallpaper_commands.add_parser("status", help="show the resolved wallpaper as JSON")
     return parser
 
 
@@ -839,15 +975,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "session" and args.session_command == "start":
             start_session(sys.argv[0], os.environ)
         if args.command == "wallpaper":
-            data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-            candidates = (
-                data_home / "weyriva/wallpapers/weyriva-coral.svg",
-                Path("/usr/share/weyriva/wallpapers/weyriva-coral.svg"),
-            )
-            wallpaper = next((candidate for candidate in candidates if candidate.is_file()), None)
-            if wallpaper is None:
-                raise RuntimeError("Weyriva wallpaper is not installed")
-            os.execvp("swaybg", ["swaybg", "-m", "fill", "-i", str(wallpaper)])
+            if args.wallpaper_command == "set":
+                return set_wallpaper(args.path, os.environ)
+            if args.wallpaper_command == "reset":
+                return reset_wallpaper(os.environ)
+            if args.wallpaper_command == "status":
+                _print_json(wallpaper_summary(os.environ))
+                return 0
+            run_wallpaper(os.environ)
         raise RuntimeError("unhandled command")
     except (ConnectionError, FileNotFoundError, OSError, RuntimeError, socket.timeout, json.JSONDecodeError) as error:
         print(f"weyriva: {error}", file=sys.stderr)

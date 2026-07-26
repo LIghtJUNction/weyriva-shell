@@ -21,6 +21,8 @@ Success and error responses:
 {"id":42,"error":{"code":"method_not_found","message":"unknown method: example.missing"}}
 ```
 
-`id` is any scalar JSON value. `params` is forwarded as one JSON value to plugins. Built-ins are `weyriva.ping`, `weyriva.info`, `weyriva.plugin.list`, `weyriva.launcher.open`, and `weyriva.notifications.dismiss_all`. Action methods accept fixed executable arguments: callers cannot supply commands.
+`id` is any scalar JSON value. `params` is forwarded as one JSON value to plugins. Built-ins are `weyriva.ping`, `weyriva.info`, `weyriva.methods`, `weyriva.plugin.list`, `weyriva.launcher.open`, `weyriva.notifications.dismiss_all`, `weyriva.notifications.dnd`, `weyriva.panel.toggle`, and `weyriva.panel.reload`. Action methods accept fixed executable arguments: callers cannot supply commands.
+
+`weyriva.methods` returns the builtin and discovered plugin method names for tooling. `weyriva.notifications.dnd` toggles the mako `dnd` mode with no parameters, or sets it explicitly with `{"enabled": true}` or `{"enabled": false}`; the packaged mako config makes that mode suppress notification display, and the response reports the resulting `dnd` state and active mode list. `weyriva.panel.toggle` and `weyriva.panel.reload` send Waybar its visibility-toggle and reload signals; both fail with `unavailable` when Waybar is not running.
 
 This is a local convenience API, not an authentication boundary. Unix permissions separate users; any process already running as the same user can call it.

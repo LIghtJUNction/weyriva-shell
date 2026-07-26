@@ -20,6 +20,8 @@ spawn-at-startup "systemctl" "--user" "start" "weyriva-ipc.service" "weyriva-way
 
 binds {
     Mod+Space { spawn "weyriva" "ipc" "call" "weyriva.launcher.open"; }
+    Mod+N { spawn "weyriva" "ipc" "call" "weyriva.notifications.dnd"; }
+    Mod+B { spawn "weyriva" "ipc" "call" "weyriva.panel.toggle"; }
     Mod+Return { spawn "foot"; }
     Mod+Q { close-window; }
     Mod+Shift+E { quit; }

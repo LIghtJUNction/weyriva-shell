@@ -338,5 +338,112 @@ class SessionLifecycleTests(unittest.TestCase):
             self.assertEqual(environment["TEST_VALUE"], "kept")
 
 
+class ControlMethodTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.registry = weyriva.PluginRegistry({"test.echo": mock.Mock()}, (), ())
+
+    def _completed(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> mock.Mock:
+        return mock.Mock(returncode=returncode, stdout=stdout, stderr=stderr)
+
+    def test_methods_lists_builtins_and_plugins(self) -> None:
+        result = weyriva.dispatch("weyriva.methods", {}, self.registry)
+        self.assertEqual(result["builtin"], list(weyriva.BUILTIN_METHODS))
+        self.assertEqual(result["plugin"], ["test.echo"])
+        self.assertIn("weyriva.notifications.dnd", result["builtin"])
+
+    def test_dnd_toggle_calls_makoctl_mode(self) -> None:
+        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed(stdout="dnd\n")) as run:
+            result = weyriva.dispatch("weyriva.notifications.dnd", {}, self.registry)
+        self.assertEqual(run.call_args.args[0], ["makoctl", "mode", "-t", "dnd"])
+        self.assertEqual(result, {"dnd": True, "modes": ["dnd"]})
+
+    def test_dnd_explicit_enable_and_disable_use_add_and_remove(self) -> None:
+        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed(stdout="dnd\n")) as run:
+            weyriva.dispatch("weyriva.notifications.dnd", {"enabled": True}, self.registry)
+        self.assertEqual(run.call_args.args[0], ["makoctl", "mode", "-a", "dnd"])
+        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed(stdout="default\n")) as run:
+            result = weyriva.dispatch("weyriva.notifications.dnd", {"enabled": False}, self.registry)
+        self.assertEqual(run.call_args.args[0], ["makoctl", "mode", "-r", "dnd"])
+        self.assertEqual(result, {"dnd": False, "modes": ["default"]})
+
+    def test_dnd_rejects_non_boolean_parameters(self) -> None:
+        with self.assertRaises(weyriva.ProtocolError) as raised:
+            weyriva.dispatch("weyriva.notifications.dnd", {"enabled": "yes"}, self.registry)
+        self.assertEqual(raised.exception.code, "invalid_params")
+
+    def test_panel_toggle_and_reload_signal_waybar(self) -> None:
+        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed()) as run:
+            result = weyriva.dispatch("weyriva.panel.toggle", {}, self.registry)
+        self.assertEqual(result, {"toggled": True})
+        self.assertEqual(run.call_args.args[0][:2], ["pkill", "-USR1"])
+        self.assertEqual(run.call_args.args[0][-1], "waybar")
+        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed()) as run:
+            result = weyriva.dispatch("weyriva.panel.reload", {}, self.registry)
+        self.assertEqual(result, {"reloaded": True})
+        self.assertEqual(run.call_args.args[0][:2], ["pkill", "-USR2"])
+
+    def test_panel_actions_report_missing_waybar(self) -> None:
+        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed(returncode=1)):
+            with self.assertRaises(weyriva.ProtocolError) as raised:
+                weyriva.dispatch("weyriva.panel.toggle", {}, self.registry)
+        self.assertEqual(raised.exception.code, "unavailable")
+
+
+class WallpaperTests(unittest.TestCase):
+    def test_resolution_prefers_override_then_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = {
+                "XDG_CONFIG_HOME": str(root / "config"),
+                "XDG_DATA_HOME": str(root / "data"),
+            }
+            with mock.patch.object(weyriva, "PACKAGED_WALLPAPER_ROOT", root / "system"):
+                self.assertEqual(weyriva.resolve_wallpaper(environment), (None, "missing"))
+                packaged = root / "data/weyriva/wallpapers" / weyriva.WALLPAPER_FILE
+                packaged.parent.mkdir(parents=True)
+                packaged.touch()
+                self.assertEqual(weyriva.resolve_wallpaper(environment), (packaged, "default"))
+                custom = root / "custom.png"
+                custom.touch()
+                override = weyriva.wallpaper_override_path(environment)
+                override.parent.mkdir(parents=True)
+                override.write_text(f"{custom}\n")
+                self.assertEqual(weyriva.resolve_wallpaper(environment), (custom, "user"))
+                custom.unlink()
+                self.assertEqual(weyriva.resolve_wallpaper(environment), (custom, "broken"))
+
+    def test_set_and_reset_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = {"XDG_CONFIG_HOME": str(root / "config"), "XDG_DATA_HOME": str(root / "data")}
+            image = root / "picture.png"
+            image.touch()
+            with (
+                mock.patch.object(weyriva, "PACKAGED_WALLPAPER_ROOT", root / "system"),
+                mock.patch.object(weyriva, "_restart_wallpaper_service", return_value="skipped"),
+            ):
+                self.assertEqual(weyriva.set_wallpaper(str(image), environment), 0)
+                override = weyriva.wallpaper_override_path(environment)
+                self.assertEqual(override.read_text().strip(), str(image.resolve()))
+                summary = weyriva.wallpaper_summary(environment)
+                self.assertEqual(summary["source"], "user")
+                self.assertEqual(weyriva.reset_wallpaper(environment), 0)
+                self.assertFalse(override.exists())
+                self.assertEqual(weyriva.wallpaper_summary(environment)["source"], "missing")
+
+    def test_set_rejects_missing_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            environment = {"XDG_CONFIG_HOME": str(Path(temporary) / "config")}
+            with self.assertRaisesRegex(RuntimeError, "does not exist"):
+                weyriva.set_wallpaper(str(Path(temporary) / "absent.png"), environment)
+
+    def test_wallpaper_parser_keeps_bare_run_command(self) -> None:
+        arguments = weyriva.build_parser().parse_args(["wallpaper"])
+        self.assertIsNone(arguments.wallpaper_command)
+        arguments = weyriva.build_parser().parse_args(["wallpaper", "set", "image.png"])
+        self.assertEqual(arguments.wallpaper_command, "set")
+        self.assertEqual(arguments.path, "image.png")
+
+
 if __name__ == "__main__":
     unittest.main()

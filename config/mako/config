@@ -15,3 +15,6 @@ max-icon-size=48
 [urgency=high]
 border-color=#b83b35
 default-timeout=0
+
+[mode=dnd]
+invisible=1

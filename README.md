@@ -58,9 +58,22 @@ weyriva diagnose
 weyriva diagnose --json
 sudo weyriva startup ensure
 weyriva ipc call weyriva.info
+weyriva ipc call weyriva.methods
 weyriva ipc call weyriva.launcher.open
+weyriva ipc call weyriva.notifications.dnd
+weyriva ipc call weyriva.panel.toggle
 weyriva plugin list
+weyriva wallpaper set ~/Pictures/wallpaper.png
+weyriva wallpaper status
+weyriva wallpaper reset
 ```
+
+`weyriva ipc call weyriva.notifications.dnd` toggles mako do-not-disturb (bound to
+Mod+N in the packaged niri config); pass `--params '{"enabled": true}'` to set it
+explicitly. `weyriva.panel.toggle` hides or shows Waybar (Mod+B) and
+`weyriva.panel.reload` reloads its configuration. `weyriva wallpaper set` records a
+per-user wallpaper override under XDG config, restarts the wallpaper service when a
+user service manager is available, and `reset` returns to the packaged artwork.
 
 `weyriva diagnose` is the Niri-only health check for the compositor, session entry,
 greetd login path, required desktop commands, user services, and the current Niri
