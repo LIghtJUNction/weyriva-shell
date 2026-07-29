@@ -31,6 +31,48 @@ fn manifest_exposes_categories_and_setting_defaults() {
 }
 
 #[test]
+fn manifest_accepts_typed_api3_launcher_metadata() {
+    let temporary = tempdir().expect("temporary directory should be created");
+    let plugin = temporary.path().join("metadata-plugin");
+    fs::create_dir(&plugin).expect("plugin fixture directory should be created");
+    fs::write(
+        plugin.join("plugin.toml"),
+        r#"
+id = "test/metadata"
+name = "Metadata"
+version = "1.0.0"
+plugin_api = 3
+author = "Weyriva"
+deprecated = true
+
+[[launcher_provider]]
+id = "main"
+entry = "main.luau"
+prefix = "metadata"
+
+[[setting]]
+key = "document"
+type = "file"
+default = "/tmp/example.txt"
+label_key = "Document"
+advanced = true
+visible_when = "enabled == true"
+extensions = ["txt", "md"]
+"#,
+    )
+    .expect("plugin manifest fixture should be written");
+    fs::write(plugin.join("main.luau"), "return {}\n")
+        .expect("plugin entry fixture should be written");
+
+    let candidate = parse_plugin(&plugin).expect("typed API3 launcher metadata should parse");
+
+    assert_eq!(
+        candidate.settings_defaults["document"],
+        json!("/tmp/example.txt")
+    );
+}
+
+#[test]
 fn manifest_rejects_mixed_plugin_surfaces() {
     let temporary = tempdir().expect("temporary directory should be created");
     let plugin = common::write_plugin(

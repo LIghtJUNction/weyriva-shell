@@ -18,6 +18,8 @@ struct RawManifest {
     version: String,
     plugin_api: u32,
     author: String,
+    #[serde(default, rename = "deprecated")]
+    _deprecated: bool,
     #[serde(default)]
     launcher_provider: Vec<RawProvider>,
     #[serde(default)]
@@ -72,6 +74,12 @@ struct RawSetting {
     _step: Option<TomlValue>,
     #[serde(default, rename = "placeholder")]
     _placeholder: Option<String>,
+    #[serde(default, rename = "advanced")]
+    _advanced: bool,
+    #[serde(default, rename = "visible_when")]
+    _visible_when: Option<String>,
+    #[serde(default, rename = "extensions")]
+    _extensions: Vec<String>,
     #[serde(flatten)]
     extra: BTreeMap<String, TomlValue>,
 }
@@ -252,7 +260,7 @@ fn validate_settings(settings: Vec<RawSetting>) -> Result<BTreeMap<String, JsonV
 fn validate_setting_default(setting: &RawSetting) -> Result<()> {
     let valid = match setting.kind.as_str() {
         "bool" => setting.default.is_bool(),
-        "string" | "select" => setting.default.is_str(),
+        "string" | "select" | "file" => setting.default.is_str(),
         "int" => setting.default.is_integer(),
         "double" => setting.default.is_float() || setting.default.is_integer(),
         "string_list" => setting
