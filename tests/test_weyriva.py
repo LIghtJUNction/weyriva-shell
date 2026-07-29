@@ -147,6 +147,10 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertNotIn("systemctl restart", content)
         self.assertNotIn("systemctl --user start", content)
+        self.assertIn(
+            '"enable", "--force", "greetd.service"',
+            (ROOT / "bin/weyriva").read_text(),
+        )
 
     def test_user_installer_never_installs_system_service_overrides(self) -> None:
         content = (ROOT / "scripts/install.sh").read_text()
@@ -492,6 +496,9 @@ class SessionLifecycleTests(unittest.TestCase):
             greetd_pam.parent.mkdir(parents=True)
             greetd_pam.write_text("session include system-login\n")
             greeter_state.parent.mkdir(parents=True)
+            display_manager = root / "etc/systemd/system/display-manager.service"
+            display_manager.parent.mkdir(parents=True)
+            display_manager.symlink_to("/usr/lib/systemd/system/greetd.service")
             greeter_session.parent.mkdir(parents=True)
             greeter_session.write_text("#!/bin/sh\n")
             session_entry.parent.mkdir(parents=True)
@@ -536,6 +543,7 @@ class SessionLifecycleTests(unittest.TestCase):
                 mock.patch.object(weyriva, "GREETD_PAM", greetd_pam),
                 mock.patch.object(weyriva, "GREETER_SESSION", greeter_session),
                 mock.patch.object(weyriva, "GREETER_STATE_DIR", greeter_state),
+                mock.patch.object(weyriva, "DISPLAY_MANAGER_LINK", display_manager),
                 mock.patch.object(weyriva, "PACKAGED_DATA_ROOT", root / "share"),
                 mock.patch.object(weyriva, "SESSION_ENTRY", session_entry),
                 mock.patch.object(weyriva.os, "geteuid", return_value=0),

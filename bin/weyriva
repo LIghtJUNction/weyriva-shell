@@ -44,6 +44,7 @@ GREETD_PAM: Final = Path("/etc/pam.d/greetd")
 GREETER_SESSION: Final = Path("/usr/bin/noctalia-greeter-session")
 GREETER_STATE_DIR: Final = Path("/var/lib/noctalia-greeter")
 GREETER_USER: Final = "greeter"
+DISPLAY_MANAGER_LINK: Final = Path("/etc/systemd/system/display-manager.service")
 SESSION_ENTRY: Final = Path("/usr/share/wayland-sessions/weyriva.desktop")
 WEYRIVA_UNITS: Final = (
     "weyriva-ipc.service",
@@ -141,6 +142,7 @@ class StartupPlan:
     greetd_changed: bool
     unit_root: Path
     units_to_back_up: tuple[str, ...]
+    display_manager_backup: Path | None
 
 
 def _diagnostic_command(name: str) -> str | None:
@@ -600,6 +602,15 @@ def preflight_startup_chain(target_user: str) -> StartupPlan:
     backup_targets = [
         *(backup_root / "systemd/user" / name for name in units_to_back_up),
     ]
+    display_manager_backup: Path | None = None
+    if DISPLAY_MANAGER_LINK.exists() or DISPLAY_MANAGER_LINK.is_symlink():
+        if not DISPLAY_MANAGER_LINK.is_symlink():
+            raise RuntimeError(
+                f"unsafe display-manager destination: {DISPLAY_MANAGER_LINK}"
+            )
+        if os.readlink(DISPLAY_MANAGER_LINK) != "/usr/lib/systemd/system/greetd.service":
+            display_manager_backup = backup_root / "systemd/display-manager.service"
+            backup_targets.append(display_manager_backup)
     if greetd_changed and GREETD_CONFIG.exists():
         backup_targets.append(greetd_backup)
     conflicts = [str(path) for path in backup_targets if path.exists() or path.is_symlink()]
@@ -618,6 +629,7 @@ def preflight_startup_chain(target_user: str) -> StartupPlan:
         greetd_changed=greetd_changed,
         unit_root=unit_root,
         units_to_back_up=units_to_back_up,
+        display_manager_backup=display_manager_backup,
     )
 
 
@@ -638,9 +650,19 @@ def ensure_startup_chain(target_user: str) -> int:
         plan.backup_root / "systemd/user",
         plan.units_to_back_up,
     )
+    if plan.display_manager_backup is not None:
+        plan.display_manager_backup.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        shutil.copy2(
+            DISPLAY_MANAGER_LINK,
+            plan.display_manager_backup,
+            follow_symlinks=False,
+        )
     _chown_tree(plan.backup_root, plan.user_uid, plan.user_gid)
 
-    _run_checked(["systemctl", "enable", "greetd.service"], "enabling greetd")
+    _run_checked(
+        ["systemctl", "enable", "--force", "greetd.service"],
+        "enabling greetd",
+    )
 
     print(f"Weyriva Niri startup chain ensured for {plan.target_user}.")
     print(f"Niri config: {plan.niri_config}")

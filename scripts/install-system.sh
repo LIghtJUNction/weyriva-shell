@@ -32,6 +32,10 @@ greeter_gid=$(getent group greeter | cut -d: -f3)
     fail 'a regular distro-provided /etc/pam.d/greetd stack is required'
 [[ -d /etc/greetd && ! -L /etc/greetd ]] ||
     fail 'a regular distro-provided /etc/greetd directory is required'
+display_manager_link=/etc/systemd/system/display-manager.service
+[[ ! -e $display_manager_link && ! -L $display_manager_link ||
+    -L $display_manager_link ]] ||
+    fail "display-manager destination is not a symlink: $display_manager_link"
 awk '
     /^[[:space:]]*#/ || NF == 0 { next }
     {
