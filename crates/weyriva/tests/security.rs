@@ -86,6 +86,57 @@ fn archive_rejects_symlink_members() {
 }
 
 #[test]
+fn archive_accepts_global_pax_header_metadata() {
+    let temporary = tempdir().expect("temporary directory should be created");
+    let archive_path = temporary.path().join("github-source.tar.gz");
+    let output = fs::File::create(&archive_path).expect("archive fixture should be created");
+    let encoder = GzEncoder::new(output, Compression::default());
+    let mut builder = Builder::new(encoder);
+
+    let pax_record = b"52 comment=0123456789012345678901234567890123456789\n";
+    let mut pax_header = Header::new_gnu();
+    pax_header.set_entry_type(EntryType::XGlobalHeader);
+    pax_header.set_size(pax_record.len() as u64);
+    pax_header.set_mode(0o644);
+    pax_header.set_cksum();
+    builder
+        .append_data(&mut pax_header, "pax_global_header", pax_record.as_slice())
+        .expect("global PAX header should be encoded");
+
+    let mut directory_header = Header::new_gnu();
+    directory_header.set_entry_type(EntryType::Directory);
+    directory_header.set_size(0);
+    directory_header.set_mode(0o755);
+    directory_header.set_cksum();
+    builder
+        .append_data(&mut directory_header, "root/", io::empty())
+        .expect("root directory should be encoded");
+
+    let contents = b"plugin source\n";
+    let mut file_header = Header::new_gnu();
+    file_header.set_entry_type(EntryType::Regular);
+    file_header.set_size(contents.len() as u64);
+    file_header.set_mode(0o644);
+    file_header.set_cksum();
+    builder
+        .append_data(&mut file_header, "root/main.luau", contents.as_slice())
+        .expect("regular file should be encoded");
+    builder
+        .into_inner()
+        .expect("tar stream should finish")
+        .finish()
+        .expect("gzip stream should finish");
+
+    let extracted = archive::extract(&archive_path, &temporary.path().join("out"))
+        .expect("global PAX metadata should be ignored");
+
+    assert_eq!(
+        fs::read(extracted.join("main.luau")).expect("extracted file should be readable"),
+        contents
+    );
+}
+
+#[test]
 fn archive_rejects_excess_directory_members() {
     let temporary = tempdir().expect("temporary directory should be created");
     let archive_path = temporary.path().join("directory-bomb.tar.gz");

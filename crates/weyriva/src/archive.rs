@@ -43,8 +43,12 @@ pub fn extract(archive_path: &Path, destination: &Path) -> Result<PathBuf> {
             })?
             .into_owned();
         validate_path(&relative)?;
+        let kind = entry.header().entry_type();
+        if kind == EntryType::XGlobalHeader {
+            continue;
+        }
         let target = destination.join(&relative);
-        match entry.header().entry_type() {
+        match kind {
             EntryType::Directory => fs::create_dir_all(&target)
                 .map_err(|error| Error::io("cannot create archive directory", &error))?,
             EntryType::Regular => {
@@ -101,16 +105,21 @@ fn inspect(archive_path: &Path) -> Result<BTreeSet<OsString>> {
         })?;
         validate_path(&path)?;
         let kind = entry.header().entry_type();
-        if kind != EntryType::Directory && kind != EntryType::Regular {
+        if kind != EntryType::Directory
+            && kind != EntryType::Regular
+            && kind != EntryType::XGlobalHeader
+        {
             return Err(Error::new(
                 "unsafe_archive",
                 "archive contains links or special files",
             ));
         }
-        if let Some(Component::Normal(root)) = path.components().next() {
+        if kind != EntryType::XGlobalHeader
+            && let Some(Component::Normal(root)) = path.components().next()
+        {
             roots.insert(root.to_os_string());
         }
-        if kind == EntryType::Regular {
+        if kind == EntryType::Regular || kind == EntryType::XGlobalHeader {
             total = total.saturating_add(entry.size());
             if total > MAX_ARCHIVE_BYTES {
                 return Err(Error::new(
