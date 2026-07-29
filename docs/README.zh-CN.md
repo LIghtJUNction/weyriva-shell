@@ -8,7 +8,7 @@ Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 niri 组合的现
 ./install.sh
 ```
 
-脚本会安装 Niri、Waybar、fuzzel、mako、swaybg、Foot、Noto Sans 与 pavucontrol；Arch 系还会安装 gsimplecal，随后自动为目标文件创建带时间戳的备份并替换为 Weyriva 配置。安装过程没有选项或个性化提示，也不会启用或重启 greetd 或图形会话。Weyriva 只提供一套默认方案；需要个性化请 Fork 后自行维护。
+脚本会安装 Niri、Waybar、fuzzel、mako、swaybg、swaylock、swayidle、Foot、Noto Sans 与 pavucontrol；Arch 系还会安装 gsimplecal，随后自动为目标文件创建带时间戳的备份并替换为 Weyriva 配置。安装过程没有选项或个性化提示，也不会启用或重启 greetd 或图形会话。Weyriva 只提供一套默认方案；需要个性化请 Fork 后自行维护。
 
 `scripts/update.sh` 与 `scripts/uninstall.sh` 仅供从 Git 检出维护项目时使用，仍遵循预览与保留优先的行为。
 
@@ -26,6 +26,7 @@ weyriva plugin list
 weyriva plugin validate examples/plugins/hello.json
 weyriva plugin reload
 weyriva ipc call weyriva.niri.outputs
+weyriva session lock
 weyriva wallpaper set ~/Pictures/wallpaper.png
 weyriva wallpaper status
 ```
@@ -41,6 +42,8 @@ Waybar(默认绑定 Mod+B),`weyriva.panel.reload` 重载其配置。
 Waybar 的时钟、网络、音频和电池均可点击，分别打开日历、NetworkManager、音频控制与电源详情；缺少图形工具时会在 Foot 中显示安全的只读回退信息。
 `weyriva wallpaper set` 在用户 XDG 配置下记录自定义壁纸并在用户服务可用时
 自动重启壁纸服务,`reset` 恢复自带壁纸。
+
+按 `Mod+Shift+X` 可立即锁屏。固定的空闲服务会在五分钟无操作、睡眠前与会话锁定事件时调用同一个 Weyriva 锁屏命令。
 
 `weyriva diagnose` 只检查 Niri 桌面链路：Niri 与运行时依赖、配置语法、Wayland
 会话入口、greetd 登录配置、用户服务和当前 Niri 会话。发现登录链路缺失时返回非零

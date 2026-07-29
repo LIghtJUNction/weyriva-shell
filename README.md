@@ -37,8 +37,8 @@ Run the one supported setup command from a checkout:
 ./install.sh
 ```
 
-It installs Niri, Waybar, fuzzel, mako, swaybg, Foot, Noto Sans, and
-pavucontrol; Arch-family systems also receive gsimplecal. It then
+It installs Niri, Waybar, fuzzel, mako, swaybg, swaylock, swayidle, Foot, Noto
+Sans, and pavucontrol; Arch-family systems also receive gsimplecal. It then
 automatically makes timestamped backups and replaces the Weyriva-managed user
 files. There are no installer choices or configuration prompts. The installer
 does not enable or restart greetd or a graphical session. Weyriva has one
@@ -81,6 +81,7 @@ weyriva plugin list
 weyriva plugin validate examples/plugins/hello.json
 weyriva plugin reload
 weyriva ipc call weyriva.niri.outputs
+weyriva session lock
 weyriva wallpaper set ~/Pictures/wallpaper.png
 weyriva wallpaper status
 weyriva wallpaper reset
@@ -93,7 +94,9 @@ explicitly. `weyriva.panel.toggle` hides or shows Waybar (Mod+B) and
 per-user wallpaper override under XDG config, restarts the wallpaper service when a
 user service manager is available, and `reset` returns to the bundled cactus
 artwork. The primary session shortcuts are Mod+Space (launcher), Mod+Return
-(terminal), Mod+B (panel), Mod+N (do-not-disturb), and Print (screenshot).
+(terminal), Mod+B (panel), Mod+N (do-not-disturb), Mod+Shift+X (lock), and Print
+(screenshot). The fixed idle lifecycle locks after five minutes, before sleep, and
+when the session lock event is emitted.
 
 The Waybar clock, network, audio, and battery controls are clickable: they open
 the calendar, NetworkManager controls, audio controls, and power details. When a

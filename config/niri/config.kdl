@@ -21,12 +21,13 @@ cursor { xcursor-theme "Adwaita"; xcursor-size 24; }
 prefer-no-csd
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
-spawn-at-startup "systemctl" "--user" "start" "weyriva-ipc.service" "weyriva-waybar.service" "weyriva-mako.service" "weyriva-wallpaper.service"
+spawn-at-startup "systemctl" "--user" "start" "weyriva-ipc.service" "weyriva-waybar.service" "weyriva-mako.service" "weyriva-wallpaper.service" "weyriva-idle.service"
 
 binds {
     Mod+Space { spawn "weyriva" "ipc" "call" "weyriva.launcher.open"; }
     Mod+N { spawn "weyriva" "ipc" "call" "weyriva.notifications.dnd"; }
     Mod+B { spawn "weyriva" "ipc" "call" "weyriva.panel.toggle"; }
+    Mod+Shift+X { spawn "weyriva" "session" "lock"; }
     Mod+Return { spawn "foot"; }
     Mod+Q { close-window; }
     Mod+Shift+E { quit; }

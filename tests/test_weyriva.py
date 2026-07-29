@@ -4,6 +4,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import shlex
 import sys
 import tempfile
 import threading
@@ -29,7 +30,7 @@ class InstallerTests(unittest.TestCase):
         for manager in ("pacman", "dnf", "apt-get", "zypper"):
             self.assertIn(manager, content)
         self.assertIn(
-            "pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot noto-fonts gsimplecal pavucontrol",
+            "pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot swaylock swayidle noto-fonts gsimplecal pavucontrol",
             content,
         )
 
@@ -327,6 +328,83 @@ class SessionLifecycleTests(unittest.TestCase):
                     ["mako", "--config", str(user_config)],
                 )
 
+    def test_lock_command_prefers_user_config_and_resolved_wallpaper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = {"XDG_CONFIG_HOME": str(root / "config"), "XDG_DATA_HOME": str(root / "data")}
+            packaged_config = root / "share/weyriva/config"
+            packaged_lock_config = packaged_config / "swaylock/config"
+            packaged_lock_config.parent.mkdir(parents=True)
+            packaged_lock_config.touch()
+            packaged_wallpaper_root = root / "share/weyriva/wallpapers"
+            wallpaper = packaged_wallpaper_root / weyriva.WALLPAPER_FILE
+            wallpaper.parent.mkdir(parents=True)
+            wallpaper.touch()
+            with (
+                mock.patch.object(weyriva, "PACKAGED_CONFIG_ROOT", packaged_config),
+                mock.patch.object(weyriva, "PACKAGED_WALLPAPER_ROOT", packaged_wallpaper_root),
+            ):
+                self.assertEqual(
+                    weyriva.lock_argv(environment),
+                    ["swaylock", "--config", str(packaged_lock_config), "--image", str(wallpaper)],
+                )
+                user_config = root / "config/swaylock/config"
+                user_config.parent.mkdir(parents=True)
+                user_config.touch()
+                custom_wallpaper = root / "custom.png"
+                custom_wallpaper.touch()
+                override = weyriva.wallpaper_override_path(environment)
+                override.parent.mkdir(parents=True)
+                override.write_text(f"{custom_wallpaper}\n")
+                self.assertEqual(
+                    weyriva.lock_argv(environment),
+                    ["swaylock", "--config", str(user_config), "--image", str(custom_wallpaper)],
+                )
+
+    def test_lock_and_idle_parser_accept_only_fixed_routes(self) -> None:
+        parser = weyriva.build_parser()
+        lock = parser.parse_args(["session", "lock"])
+        self.assertEqual((lock.command, lock.session_command), ("session", "lock"))
+        self.assertEqual(parser.parse_args(["idle"]).command, "idle")
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["session", "lock", "extra"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["idle", "extra"])
+        self.assertEqual(
+            weyriva.idle_argv("/usr/bin/weyriva", {}),
+            [
+                "swayidle",
+                "-w",
+                "timeout",
+                "300",
+                "/usr/bin/weyriva session lock",
+                "before-sleep",
+                "/usr/bin/weyriva session lock",
+                "lock",
+                "/usr/bin/weyriva session lock",
+            ],
+        )
+
+    def test_idle_hooks_use_the_absolute_shell_quoted_running_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source_executable = root / "home/tester/.local/bin/weyriva"
+            source_executable.parent.mkdir(parents=True)
+            source_executable.touch(mode=0o755)
+            source_executable.chmod(0o755)
+            source_hooks = weyriva.idle_argv("weyriva", {"PATH": str(source_executable.parent)})
+            self.assertEqual(
+                [source_hooks[index] for index in (4, 6, 8)],
+                [f"{source_executable} session lock"] * 3,
+            )
+
+            sensitive_executable = root / "shell;unsafe path/weyriva"
+            sensitive_hooks = weyriva.idle_argv(str(sensitive_executable), {})
+            expected = f"{shlex.quote(str(sensitive_executable.resolve()))} session lock"
+            self.assertTrue(Path(sensitive_executable).is_absolute())
+            self.assertTrue(expected.startswith("'"))
+            self.assertEqual([sensitive_hooks[index] for index in (4, 6, 8)], [expected] * 3)
+
     def test_niri_config_prefers_environment_then_user_then_packaged(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -371,6 +449,22 @@ class SessionLifecycleTests(unittest.TestCase):
             self.assertIn("Requisite=graphical-session.target", content)
         self.assertIn("weyriva component waybar", (ROOT / "systemd/weyriva-waybar.service").read_text())
         self.assertIn("weyriva component mako", (ROOT / "systemd/weyriva-mako.service").read_text())
+        self.assertIn('"weyriva-idle.service"', config)
+        self.assertIn('Mod+Shift+X { spawn "weyriva" "session" "lock"; }', config)
+        self.assertIn("ExecStart=%h/.local/bin/weyriva idle", (ROOT / "systemd/weyriva-idle.service").read_text())
+
+    def test_lockscreen_config_and_dependencies_are_declared(self) -> None:
+        lock_config = (ROOT / "config/swaylock/config").read_text()
+        self.assertIn("font=Noto Sans", lock_config)
+        for color in ("141413", "FAF9F5", "BCD1CA"):
+            self.assertIn(color, lock_config)
+        installer = (ROOT / "install.sh").read_text()
+        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
+        for dependency in ("swaylock", "swayidle"):
+            self.assertIn(dependency, installer)
+            self.assertIn(f"'{dependency}'", package)
+        self.assertIn('config/swaylock/config "$pkgdir/usr/share/weyriva/config/swaylock/config"', package)
+        self.assertIn('install_tree "$WEYRIVA_ROOT/config/swaylock" "$CONFIG_HOME/swaylock"', (ROOT / "scripts/install.sh").read_text())
 
     def test_system_session_uses_absolute_system_cli(self) -> None:
         desktop = (ROOT / "user-share/wayland-sessions/weyriva.desktop").read_text()

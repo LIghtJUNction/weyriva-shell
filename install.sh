@@ -39,20 +39,20 @@ run_as_root() {
 
 case ${managers[0]} in
     pacman)
-        run_as_root pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot noto-fonts gsimplecal pavucontrol
+        run_as_root pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot swaylock swayidle noto-fonts gsimplecal pavucontrol
         ;;
     dnf)
-        run_as_root dnf install -y niri waybar fuzzel mako swaybg foot google-noto-sans-fonts pavucontrol
+        run_as_root dnf install -y niri waybar fuzzel mako swaybg foot swaylock swayidle google-noto-sans-fonts pavucontrol
         ;;
     apt-get)
-        run_as_root apt-get install -y niri waybar fuzzel mako swaybg foot fonts-noto-core pavucontrol
+        run_as_root apt-get install -y niri waybar fuzzel mako swaybg foot swaylock swayidle fonts-noto-core pavucontrol
         ;;
     zypper)
-        run_as_root zypper --non-interactive install niri waybar fuzzel mako swaybg foot google-noto-sans-fonts pavucontrol
+        run_as_root zypper --non-interactive install niri waybar fuzzel mako swaybg foot swaylock swayidle google-noto-sans-fonts pavucontrol
         ;;
 esac
 
-for command_name in niri waybar fuzzel mako swaybg foot; do
+for command_name in niri waybar fuzzel mako swaybg foot swaylock swayidle; do
     command -v "$command_name" >/dev/null 2>&1 || fail "required command is unavailable after package installation: $command_name"
 done
 

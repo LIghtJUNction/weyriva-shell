@@ -11,6 +11,7 @@ import os
 import pwd
 import re
 import selectors
+import shlex
 import shutil
 import signal
 import socket
@@ -34,7 +35,7 @@ RESERVED_PREFIX: Final = "weyriva."
 MAX_HANDLERS: Final = 16
 READ_TIMEOUT: Final = 3.0
 PLUGIN_ID_PATTERN: Final = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
-RUNTIME_COMMANDS: Final = ("niri", "niri-session", "waybar", "fuzzel", "mako", "swaybg", "foot")
+RUNTIME_COMMANDS: Final = ("niri", "niri-session", "waybar", "fuzzel", "mako", "swaybg", "foot", "swaylock", "swayidle")
 PACKAGED_CONFIG_ROOT: Final = Path("/usr/share/weyriva/config")
 PACKAGED_UNIT_ROOT: Final = Path("/usr/lib/systemd/user")
 GREETD_TEMPLATE: Final = Path("/usr/share/weyriva/greetd/config.toml")
@@ -45,12 +46,14 @@ WEYRIVA_UNITS: Final = (
     "weyriva-waybar.service",
     "weyriva-mako.service",
     "weyriva-wallpaper.service",
+    "weyriva-idle.service",
 )
 LEGACY_UNIT_MARKERS: Final = {
     "weyriva-ipc.service": "ExecStart=%h/.local/bin/weyriva daemon",
     "weyriva-waybar.service": "ExecStart=/usr/bin/waybar",
     "weyriva-mako.service": "ExecStart=/usr/bin/mako",
     "weyriva-wallpaper.service": "ExecStart=%h/.local/bin/weyriva wallpaper",
+    "weyriva-idle.service": "ExecStart=%h/.local/bin/weyriva idle",
 }
 BUILTIN_METHODS: Final = (
     "weyriva.ping",
@@ -160,6 +163,11 @@ def component_argv(component: str, environment: Mapping[str, str]) -> list[str]:
         style = user_style if user_style.is_file() else packaged_root / "style.css"
         return ["waybar", "--config", str(config), "--style", str(style)]
     raise RuntimeError(f"unsupported component: {component}")
+
+
+def swaylock_config_path(environment: Mapping[str, str]) -> Path:
+    user_config = _config_home(environment) / "swaylock/config"
+    return user_config if user_config.is_file() else PACKAGED_CONFIG_ROOT / "swaylock/config"
 
 
 def reconcile_startup_file(source: Path, destination: Path, backup: Path) -> bool:
@@ -976,6 +984,51 @@ def run_wallpaper(environment: Mapping[str, str]) -> NoReturn:
     raise RuntimeError("swaybg exec unexpectedly returned")
 
 
+def lock_argv(environment: Mapping[str, str]) -> list[str]:
+    wallpaper, source = resolve_wallpaper(environment)
+    if source == "broken":
+        raise RuntimeError(f"configured wallpaper is missing: {wallpaper}; run 'weyriva wallpaper reset'")
+    if wallpaper is None:
+        raise RuntimeError("Weyriva wallpaper is not installed")
+    return ["swaylock", "--config", str(swaylock_config_path(environment)), "--image", str(wallpaper)]
+
+
+def run_lock(environment: Mapping[str, str]) -> NoReturn:
+    command = lock_argv(environment)
+    os.execvp(command[0], command)
+    raise RuntimeError("swaylock exec unexpectedly returned")
+
+
+def running_executable_path(argv0: str, environment: Mapping[str, str]) -> str:
+    if os.sep in argv0:
+        return str(Path(argv0).expanduser().resolve())
+    located = shutil.which(argv0, path=environment.get("PATH", ""))
+    if located is None:
+        raise RuntimeError(f"cannot resolve the running Weyriva executable: {argv0}")
+    return str(Path(located).expanduser().resolve())
+
+
+def idle_argv(argv0: str, environment: Mapping[str, str]) -> list[str]:
+    lock_command = f"{shlex.quote(running_executable_path(argv0, environment))} session lock"
+    return [
+        "swayidle",
+        "-w",
+        "timeout",
+        "300",
+        lock_command,
+        "before-sleep",
+        lock_command,
+        "lock",
+        lock_command,
+    ]
+
+
+def run_idle(argv0: str, environment: Mapping[str, str]) -> NoReturn:
+    command = idle_argv(argv0, environment)
+    os.execvp(command[0], command)
+    raise RuntimeError("swayidle exec unexpectedly returned")
+
+
 def _restart_wallpaper_service() -> str:
     if not os.environ.get("XDG_RUNTIME_DIR") or shutil.which("systemctl") is None:
         return "wallpaper service not restarted; no user service manager here"
@@ -1041,6 +1094,8 @@ def build_parser() -> argparse.ArgumentParser:
     session = commands.add_parser("session", help="manage the desktop session")
     session_commands = session.add_subparsers(dest="session_command", required=True)
     session_commands.add_parser("start", help="start niri as the current session")
+    session_commands.add_parser("lock", help="lock the session with the Weyriva lock screen")
+    commands.add_parser("idle", help="run the fixed Weyriva idle lifecycle")
     component = commands.add_parser("component", help="run a managed Niri desktop component")
     component.add_argument("name", choices=("waybar", "mako", "fuzzel"))
     desktop = commands.add_parser("desktop", help="open a built-in desktop control")
@@ -1134,6 +1189,10 @@ def main(argv: list[str] | None = None) -> int:
             return run_desktop_action(args.action, args.terminal)
         if args.command == "session" and args.session_command == "start":
             start_session(sys.argv[0], os.environ)
+        if args.command == "session" and args.session_command == "lock":
+            run_lock(os.environ)
+        if args.command == "idle":
+            run_idle(sys.argv[0], os.environ)
         if args.command == "wallpaper":
             if args.wallpaper_command == "set":
                 return set_wallpaper(args.path, os.environ)

@@ -19,6 +19,7 @@ install_tree "$WEYRIVA_ROOT/config/niri" "$CONFIG_HOME/niri"
 install_tree "$WEYRIVA_ROOT/config/waybar" "$CONFIG_HOME/waybar"
 install_tree "$WEYRIVA_ROOT/config/fuzzel" "$CONFIG_HOME/fuzzel"
 install_tree "$WEYRIVA_ROOT/config/mako" "$CONFIG_HOME/mako"
+install_tree "$WEYRIVA_ROOT/config/swaylock" "$CONFIG_HOME/swaylock"
 install_tree "$WEYRIVA_ROOT/systemd" "$SYSTEMD_HOME"
 install_tree "$WEYRIVA_ROOT/assets/wallpapers" "$DATA_HOME/weyriva/wallpapers"
 remove_obsolete_managed
