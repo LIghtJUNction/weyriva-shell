@@ -6,14 +6,21 @@ fail() {
     exit 1
 }
 
-if [[ $# -ne 2 || $1 != --user || -z $2 || $2 == root ]]; then
-    fail 'usage: scripts/install-system.sh --user USER'
+PREFLIGHT=false
+if [[ $# -eq 3 && $1 == --preflight && $2 == --user && -n $3 && $3 != root ]]; then
+    PREFLIGHT=true
+    TARGET_USER=$3
+elif [[ $# -eq 2 && $1 == --user && -n $2 && $2 != root ]]; then
+    TARGET_USER=$2
+else
+    fail 'usage: scripts/install-system.sh [--preflight] --user USER'
 fi
 [[ $EUID -eq 0 ]] || fail 'root privileges are required'
 command -v systemctl >/dev/null 2>&1 || fail 'systemd is required'
 command -v getent >/dev/null 2>&1 || fail 'getent is required'
 command -v runuser >/dev/null 2>&1 || fail 'runuser is required'
-for command_name in niri niri-session noctalia noctalia-greeter-session foot; do
+[[ -x /usr/bin/env ]] || fail '/usr/bin/env is required for the isolated greeter environment'
+for command_name in niri niri-session quickshell cage foot; do
     command -v "$command_name" >/dev/null 2>&1 ||
         fail "required command is unavailable: $command_name"
 done
@@ -21,7 +28,6 @@ systemd_version=$(systemctl --version | awk 'NR == 1 { print $2 }')
 [[ $systemd_version =~ ^[0-9]+$ && $systemd_version -ge 254 ]] ||
     fail 'systemd 254 or newer is required'
 
-TARGET_USER=$2
 target_uid=$(id -u "$TARGET_USER") || fail "unknown desktop user: $TARGET_USER"
 greeter_uid=$(id -u greeter 2>/dev/null) ||
     fail 'the greeter account is required'
@@ -60,7 +66,6 @@ if [[ -f $user_niri_config ]]; then
 fi
 niri validate -c "$ROOT/config/niri/config.kdl"
 niri validate -c "$effective_niri_config"
-noctalia config validate "$ROOT/config/noctalia"
 unit_verify_dir=$(mktemp -d /tmp/weyriva-systemd-verify.XXXXXX)
 chmod 0755 "$unit_verify_dir"
 install -m 0755 "$ROOT/bin/weyriva" "$unit_verify_dir/weyriva"
@@ -123,10 +128,12 @@ plan_file() {
 
 plan_file "$ROOT/bin/weyriva" /usr/bin/weyriva 0755
 plan_file "$ROOT/config/niri/config.kdl" /usr/share/weyriva/config/niri/config.kdl
-plan_file "$ROOT/config/noctalia/config.toml" /usr/share/weyriva/config/noctalia/config.toml
-plan_file \
-    "$ROOT/config/noctalia/palettes/Weyriva.json" \
-    /usr/share/weyriva/config/noctalia/palettes/Weyriva.json
+for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/config/weyriva"; do
+    while IFS= read -r -d '' source; do
+        relative=${source#"$ROOT"/}
+        plan_file "$source" "/usr/share/weyriva/$relative"
+    done < <(find "$source_root" -type f -print0 | sort -z)
+done
 plan_file "$ROOT/config/greetd/config.toml" /usr/share/weyriva/greetd/config.toml
 plan_file \
     "$ROOT/assets/wallpapers/weyriva-cactus.png" \
@@ -148,7 +155,10 @@ for index in "${!install_sources[@]}"; do
 done
 
 validate_file_destination "$ROOT/config/greetd/config.toml" /etc/greetd/config.toml
-validate_directory_destination /var/lib/noctalia-greeter
+validate_directory_destination /var/lib/weyriva-greeter
+for directory in state cache config; do
+    validate_directory_destination "/var/lib/weyriva-greeter/$directory"
+done
 validate_directory_destination "$target_home/.config/systemd/user"
 validate_safe_parent "$target_home/.local/state/weyriva/startup-backups/placeholder"
 startup_backup_root="$target_home/.local/state/weyriva/startup-backups/$INSTALL_TIMESTAMP"
@@ -170,6 +180,12 @@ for unit in weyriva-ipc.service weyriva-shell.service; do
     [[ ! -e $link && ! -L $link ]] ||
         fail "refusing to replace unexpected niri wants entry: $link"
 done
+
+if [[ $PREFLIGHT == true ]]; then
+    printf 'System install preflight passed for %s; no system files were changed.\n' \
+        "$TARGET_USER"
+    exit 0
+fi
 
 backup_existing() {
     local destination=$1

@@ -1,150 +1,96 @@
 # Developer experience
 
-Weyriva ships one zero-configuration “vibe-coding” workflow. It favors fast
-keyboard access, visible system state, predictable workspaces, and a reliable
-recovery path. The installer does not ask which terminal, launcher, theme, or
-layout to use. A substantially different workflow belongs in a maintained fork.
+## Current status
 
-## Default flow
+Weyriva provides a deterministic Niri-oriented desktop layout, a local control
+CLI, and repository-owned Quickshell surfaces. The current source exposes the
+core launcher, control center, calendar, notifications, wallpaper, settings,
+terminal, lock, and compositor actions listed below.
 
-| Action | Shortcut | Owner |
-| --- | --- | --- |
-| Launcher | `Mod+Space` | Noctalia launcher |
-| Terminal | `Mod+Return` | Foot |
-| Clipboard history | `Mod+V` | Noctalia clipboard |
-| Control center/status | `Mod+C` | Noctalia control center |
-| Do Not Disturb | `Mod+N` | Noctalia notifications |
-| Toggle bar | `Mod+B` | Noctalia bar |
-| Wallpaper picker | `Mod+W` | Noctalia wallpaper panel |
-| Theme mode | `Mod+Shift+T` | Noctalia theme mode |
-| Session/recovery actions | `Mod+Shift+E` | Noctalia session panel |
-| Lock | `Mod+Shift+X` | Noctalia lock |
-| Region screenshot | `Print` | Noctalia screenshot |
-| Close window | `Mod+Q` | Niri |
-| Focus left/down/up/right | `Mod+H/J/K/L` | Niri |
-| Move column left/right | `Mod+Shift+H/L` | Niri |
-| Workspace 1/2/3 | `Mod+1/2/3` | Niri |
-| Move to workspace 1/2/3 | `Mod+Shift+1/2/3` | Niri |
+Installed input behavior, login, lock, and lifecycle acceptance on XRY remain
+pending. A command or QML handler existing in source does not prove the
+installed shell is interactive.
 
-The live Niri configuration is authoritative if a shortcut changes. README and
-this table must be updated in the same change.
+## Fixed default flow
 
-## Launcher
+| Intent | Binding | Result |
+|---|---|---|
+| Launch/search | `Mod+Space` | centered Launcher |
+| Notifications | `Mod+N` | top-right Notifications |
+| Control center | `Mod+C` | top-right Control Center |
+| Wallpaper | `Mod+W` | centered Wallpaper |
+| Settings | `Mod+Shift+T` | centered Settings |
+| Lock | `Mod+Shift+X` | request native secure lock |
+| Terminal | `Mod+Return` | launch Foot |
+| Close window | `Mod+Q` | Niri close action |
+| Focus | `Mod+H/J/K/L` | Niri directional focus |
+| Move column | `Mod+Shift+H/L` | Niri column movement |
+| Workspace | `Mod+1/2/3` | Niri workspace focus |
+| Move to workspace | `Mod+Shift+1/2/3` | Niri workspace movement |
+| Screenshot | `Print` | Niri screenshot |
 
-The launcher is the primary entry point for applications, commands,
-calculator/emoji results, session actions, windows, wallpapers, and native
-plugin providers. Prefer canonical Noctalia providers over parallel scripts or
-a second launcher.
+These bindings are the shipped zero-configuration default. Structural
+personalization belongs in a maintained fork.
 
-If an action fails, the launcher or resulting notification must expose the
-failure. A row that highlights but never activates does not pass.
+## Surface workflows
 
-## Terminal and workspaces
+The launcher filters actual desktop entries and executes a selected entry. It
+does not interpolate search text into a shell command.
 
-Foot is the fixed terminal because it is small, Wayland-native, and available
-on Arch-family systems. Applications marked `Terminal=true` are launched
-through Noctalia's terminal discovery path. The default three workspaces keep
-the workflow obvious:
+The control center presents two columns of real controls. The calendar exposes
+month navigation and a date grid. Notifications are dismissible and include an
+empty state. Wallpaper selection is visual and updates wallpaper and related
+appearance state. Settings shows explicit values and visibly disables future
+capabilities.
 
-1. editor and primary task;
-2. terminal/build/logs;
-3. browser/reference/communication.
+Centered launcher/wallpaper/settings surfaces support focused work. Top-right
+control-center/calendar/notification surfaces remain spatially tied to their
+bar sources.
 
-This is a convention, not a hard workspace restriction. Forks may change it;
-the base installer does not prompt.
+## Theme and personalization
 
-## Clipboard and focus
+Light and dark presentation are supported in source. Dynamic wallpaper color
+extraction is not implemented. Wallpaper choices use the fixed Weyriva palette
+and must not be described as generated themes.
 
-`Mod+V` opens Noctalia's encrypted clipboard-history surface. Native live
-clipboard behavior and stored history are distinct; disabling history must not
-break ordinary text-field copy/paste.
+The product avoids installation questions and per-user structural options.
+Small runtime choices such as the current appearance or wallpaper may be state;
+changes to layout, policy, package set, or workflow belong in a fork.
 
-`Mod+N` toggles Do Not Disturb. It suppresses notification toasts while history
-continues to collect. Use it for focus sessions instead of disabling the
-notification daemon or starting a second daemon.
+## Status and diagnostics
 
-Useful status commands:
+Useful commands include:
 
 ```bash
-weyriva shell msg notification-dnd-status
-weyriva shell msg clipboard-text
-weyriva shell msg status
 weyriva status
-```
-
-## Theme and screenshots
-
-The default mode follows a fixed zero-configuration day/night schedule.
-`Mod+Shift+T` is the manual light/dark override. Exact scriptable controls are:
-
-```bash
-weyriva shell msg theme-mode-get
-weyriva shell msg theme-mode-toggle
-weyriva shell msg theme-mode-set auto
-weyriva shell msg color-scheme-get
-```
-
-`Print` starts region capture. Full-screen and output-specific paths are also
-available:
-
-```bash
-weyriva shell msg screenshot-fullscreen
-weyriva shell msg screenshot-fullscreen pick
-weyriva shell msg screenshot-fullscreen DP-1
-weyriva shell msg screenshot-fullscreen all
-```
-
-## Developer status
-
-The control center and bar expose network, Bluetooth, volume, brightness,
-battery, media, notifications, tray, and session state. Detailed shell and
-compositor diagnostics remain available without depending on those buttons:
-
-```bash
 weyriva diagnose
 weyriva diagnose --json
-weyriva shell msg status
 weyriva ipc call weyriva.info
 weyriva ipc call weyriva.niri.outputs
-weyriva ipc call weyriva.niri.windows
 ```
+
+The native QML IPC surface includes a typed `status(): string` method. This can
+show that the live QML IPC target answered. It does not prove pointer input,
+all route actions, PAM authentication, output coverage, or secure
+`WlSessionLock` recovery.
 
 ## Recovery
 
-If a panel is closed or stale:
+The normal recovery sequence is:
 
-```bash
-weyriva shell msg config-reload
-systemctl --user restart weyriva-shell.service
-```
+1. dismiss the active surface with Escape when possible;
+2. use the bounded user-shell recovery path;
+3. switch to a TTY if the graphical session is unusable;
+4. inspect user and greetd journals;
+5. repair the installed path only with evidence of the failure.
 
-Restarting the shell is a bounded recovery action, not a substitute for fixing
-dead controls. When the session is locked, restart must reconcile lock state or
-fail closed as documented in [Session lifecycle](SESSION_LIFECYCLE.md).
+Restart while locked is security-sensitive. Never convert a successful status
+reply into evidence that the previous secure lock survived or was reacquired.
+See [Session lifecycle](SESSION_LIFECYCLE.md).
 
-If the graphical session cannot recover, switch to TTY2 and inspect:
+## Acceptance boundary
 
-```bash
-journalctl --user -u weyriva-shell.service -b --no-pager
-weyriva diagnose
-```
-
-Do not repeatedly restart greetd from an active graphical session; that ends the
-login session.
-
-## Fork policy
-
-The base distribution intentionally has no installer questionnaire. Fork when
-changing:
-
-- terminal, compositor, login surface, or shell engine;
-- workspace count or navigation model;
-- package policy or supported distributions;
-- global visual language or palette transform;
-- plugin trust policy;
-- default privacy/network behavior;
-- authentication/session architecture.
-
-Small runtime choices already exposed by Noctalia Settings remain user state,
-but Weyriva does not promise to preserve a customized distribution profile
-across arbitrary fork-level changes.
+Source tests can prove bindings, action wiring, IPC types, and the absence of
+dead enabled controls. Runtime testing must prove rendering and input. System
+testing must prove greetd, PAM, Niri, systemd, and lock behavior. XRY claims
+require the exact installed revision and recorded interaction evidence.

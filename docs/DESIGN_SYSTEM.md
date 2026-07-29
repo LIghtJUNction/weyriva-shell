@@ -1,170 +1,124 @@
 # Design system
 
-Weyriva combines two clearly separated influences:
+## Current status
 
-- the `apple-design` interaction discipline informs hierarchy, familiar
-  controls, restrained material depth, immediate feedback, spatial continuity,
-  keyboard behavior, and motion;
-- the `anthropic-art` visual grammar informs project-owned wallpapers,
-  login/lock artwork, and empty-state illustrations: opaque muted fields,
-  irregular ivory carriers, and near-black hand-drawn marks.
+Weyriva has an independent QtQuick shell, shared theme/state primitives, and
+Weyriva-owned desktop, greeter, and lock QML in the repository. The current
+visual iteration exists in source and has behavior-bearing static tests. Source
+presence is not runtime acceptance: pointer input, keyboard navigation, secure
+lock behavior, and installed lifecycle behavior have not yet been accepted on
+XRY.
 
-These are design references, not endorsements. Weyriva is not affiliated with,
-sponsored by, or presented as an Apple or Anthropic product.
+The source supports light and dark presentation. It does **not** currently
+implement dynamic palette extraction from wallpaper pixels. Documents and UI
+must not imply otherwise.
 
-## Responsibility boundary
+## Two-layer identity
 
-Functional UI belongs to the interaction system. It must remain legible,
-predictable, focusable, and operable without relying on the wallpaper.
-Editorial artwork belongs behind or beside the controls. It must never become a
-button, cover a hit target, carry required status text, or replace a semantic
-icon or label.
+Weyriva combines two separate design responsibilities:
 
-The boundary is deliberate:
+- the Anthropic-inspired brand layer provides flat editorial color, irregular
+  carriers, rounded hand-drawn marks, and deliberate asymmetry;
+- the Apple-inspired behavior layer provides restrained hierarchy, immediate
+  feedback, spatial continuity, focus clarity, and interruptible motion.
 
-| Layer | Allowed language | Not allowed |
-| --- | --- | --- |
-| Wallpaper and illustration | Flat accent field, irregular ivory carrier, gestural ink linework | Glass, gradients, photographic lighting, decorative UI controls |
-| Shell surfaces | Semantic palette roles, restrained translucency, clear borders, system typography | Hand-drawn hit targets, text embedded in art, uncontrolled transparency |
-| Interaction | Immediate pressed/focus state, source-anchored panels, symmetric dismissal | Decorative motion, surprise relocation, hover-only access |
+These are original project-owned implementations, not copied assets,
+affiliations, or runtime dependencies.
 
-## Brand primitives
+### Brand layer
 
-The offline reference palette starts from:
+The primary visual grammar is:
 
-| Token | Reference | Use |
-| --- | --- | --- |
-| `ink` | `#141413` | Primary dark surface, linework, light-mode text |
-| `ivory` | `#FAF9F5` | Primary light surface, dark-mode text, illustration carrier |
-| `cactus` | `#BCD1CA` | Default muted accent and wallpaper field |
+- cactus `#BCD1CA` as the characteristic accent field;
+- ivory `#FAF9F5` as the paper/carrier color;
+- ink `#141413` as the primary mark and text color;
+- flat, opaque fills;
+- one irregular carrier or deliberately asymmetric composition;
+- rounded, slightly uneven linework with generous negative space.
 
-Wallpaper-derived mode is the normal runtime source, so active colors may
-change. Components use semantic roles rather than these literals. The exact
-mapping and upstream generator are documented in [Theming](THEMING.md).
+The existing flat cactus artwork is the reference. Avoid gradients, gloss,
+glass-like decoration, photographic lighting, generic stock cards, perfect
+geometric repetition, and dense cards nested inside cards.
 
-## Semantic color contract
+Supporting colors may include clay `#D97757`, heather `#CBCADB`, oat `#E3DACC`,
+olive `#788C5D`, sky `#6A9BCC`, fig `#C46686`, and coral `#EBCECE`. Components
+consume semantic theme roles rather than scattering these literals.
 
-Noctalia exposes 16 shell roles. Every Weyriva palette or generated theme must
-produce a valid, opaque value for all of them:
+### Behavior layer
 
-| Role | Requirement |
-| --- | --- |
-| `primary` | Main action, active selection, focus emphasis |
-| `on_primary` | Readable content on `primary` |
-| `secondary` | Lower-priority accent; never indistinguishable from disabled state |
-| `on_secondary` | Readable content on `secondary` |
-| `tertiary` | Sparse supporting emphasis, not a third competing brand color |
-| `on_tertiary` | Readable content on `tertiary` |
-| `error` | Destructive/error state only |
-| `on_error` | Readable content on `error` |
-| `surface` | Main panel, settings, and shell background |
-| `on_surface` | Primary text/icons on `surface` |
-| `surface_variant` | Cards and secondary regions |
-| `on_surface_variant` | Secondary text/icons on variant surfaces |
-| `outline` | Borders, separators, focus reinforcement |
-| `shadow` | Restrained depth cue; never the only boundary |
-| `hover` | Pointer hover and keyboard-selection background |
-| `on_hover` | Readable content on `hover` |
+Interactive UI follows these invariants:
 
-Text and essential icons target WCAG AA contrast: 4.5:1 for normal text and
-3:1 for large text and non-text UI boundaries. Destructive actions require
-both color and a label/icon; color alone is insufficient.
+- feedback begins on pointer-down or key activation;
+- focus remains visibly distinct from hover and selection;
+- entry and exit use the same source-anchored path;
+- interrupted motion continues from its current visible value;
+- hierarchy is expressed with spacing, type, and restrained surface contrast;
+- reduced motion uses a cross-fade or static alternative;
+- no enabled control is decorative or actionless.
 
-## Typography
+## Surface architecture
 
-Use system-resolved fonts through Fontconfig. The fixed profile may name Noto
-Sans, but controls must tolerate distribution fallback. Do not ship text as
-images.
+Routes intentionally use two spatial families:
 
-- Body and controls: regular or medium system sans.
-- Titles: weight and size provide hierarchy; avoid decorative display faces.
-- Monospace content: terminal-resolved monospace, never forced into general UI.
-- Keep labels concise and literal. Icon-only controls require an accessible
-  name and tooltip where the engine supports one.
+| Family | Routes | Placement |
+|---|---|---|
+| Focused work | launcher, wallpaper, settings | centered |
+| Glanceable state | control center, calendar, notifications | top-right |
 
-## Spacing, radius, and material
+Focused surfaces prioritize browsing, selection, and deliberate changes.
+Glanceable surfaces remain close to their bar triggers and dismiss along the
+same path from which they entered.
 
-Use a 4 px base rhythm. Common gaps are 8, 12, 16, 24, and 32 px. Keep related
-controls closer than unrelated groups.
+The required behavior of each route is:
 
-Rounded geometry communicates grouping, not decoration. A 12–16 px panel/card
-radius and smaller control radius are the normal range. Do not nest multiple
-large rounded cards without a hierarchy reason.
+- Launcher filters real desktop entries and executes the selected entry.
+- Control center uses a two-column layout of real controls with visible state.
+- Calendar provides previous/next month actions and a navigable date grid.
+- Notifications allow dismissal and expose an explicit empty state.
+- Wallpaper presents visual choices and updates the selected path and related
+  appearance state.
+- Settings exposes explicit values and state-changing controls; future or
+  unavailable functions are visibly disabled.
+- Greeter and lock share the same visual family while retaining separate
+  authentication and security responsibilities.
 
-Translucency is allowed only when text remains stable over every bundled
-wallpaper. Prefer solid or soft material for dense panels, settings, the
-launcher, calendar, and authentication. Blur and shadow are supporting depth
-cues; borders and contrast must still define the surface when effects are
-disabled.
+## Components and state
 
-## Component state matrix
+Every enabled control has an action, a visible label or accessible name, and
+observable feedback. Core states are rest, hover, focus, pressed, selected,
+disabled, loading, success, and error.
 
-Every actionable component must define all applicable states:
+Pressed feedback is immediate. Focus uses a persistent high-contrast boundary.
+Disabled controls do not respond and explain unavailable behavior where useful.
+Errors remain visible long enough to understand and recover from them.
 
-| State | Visual and behavioral expectation |
-| --- | --- |
-| Rest | Clear affordance and readable label/icon |
-| Hover | Immediate background or outline change; no layout shift |
-| Pressed | Immediate compression/color response before the action completes |
-| Keyboard focus | Persistent, high-contrast ring independent of hover |
-| Selected | Durable state distinct from transient hover |
-| Disabled | Lower emphasis while retaining readable purpose; not clickable |
-| Loading | Activity and label/status; do not silently ignore repeated input |
-| Success | Confirm outcome without moving the initiating control |
-| Error | Explain failure near the control and preserve a recovery path |
+Controls must not rely on color alone for essential state. Text, shape, glyph,
+or position also communicates selection, DND, authentication failure, and
+other status.
 
-Pointer targets are at least 44×44 logical pixels for primary touch-like
-actions. Dense desktop rows may be smaller only when the whole row is clickable
-and keyboard focus remains clear. Adjacent destructive and routine actions need
-enough separation to prevent accidental activation.
+## Typography, space, and shape
 
-## Light and dark
+Use the platform sans-serif stack. Display text is compact and confident; body
+text remains readable at increased scale; monospace is reserved for commands,
+paths, identifiers, and diagnostics.
 
-Light and dark are first-class modes, not an inverted screenshot. Validate:
+Spacing follows a compact four-pixel-derived rhythm. Large carriers may use
+generous rounded or irregular silhouettes, while controls use a small,
+consistent radius set. Deliberate asymmetry belongs in composition and artwork,
+not in unpredictable control alignment.
 
-- surfaces, cards, popups, borders, text, icons, terminal ANSI colors, and
-  selection colors;
-- wallpaper and lock/login artwork independently;
-- transparent material against both light and dark parts of each wallpaper;
-- hover, focus, disabled, error, and destructive states;
-- system tray and application icons that do not follow semantic roles.
+## Artwork boundary
 
-Automatic mode uses Weyriva's fixed schedule, while the `theme_mode` control
-provides a manual override. Exact behavior is in [Theming](THEMING.md).
+Artwork may sit behind or beside controls but never becomes a hit target,
+carries required status text, obscures focus, or replaces semantic labels.
+Background windows use an empty input mask and cannot capture interaction.
 
-## Artwork grammar
+## Acceptance boundary
 
-Project-owned Anthropic-inspired artwork uses exactly three visual layers:
+Static source tests may prove that routes, actions, theme roles, and reduced
+motion branches exist. They do not prove rendering, input, animation quality,
+authentication, or secure lock recovery.
 
-1. a full-frame opaque muted accent field;
-2. one large irregular ivory shape;
-3. near-black gestural linework and solid marks.
-
-Use one accent family, rounded uneven strokes, deliberate asymmetry, and at
-least 10% breathing room around the focal cluster. Avoid gradients, cast
-shadows, realistic perspective, glossy lighting, perfect geometry, and generic
-stock-vector detail.
-
-## Interaction requirements
-
-- Every button and calendar control must work by pointer and keyboard.
-- Enter/Space activates focused controls; Escape closes transient surfaces.
-- Focus order follows visual order and never enters invisible content.
-- Opening panels originate from their launcher/bar source where the engine
-  supports it; closing returns attention to the source.
-- Click feedback is immediate even when a backend operation is asynchronous.
-- A failed network, plugin, calendar, or privilege action presents an error; it
-  must not look like a dead button.
-
-## Anti-patterns
-
-- Artwork placed over controls or used as a control.
-- Random transition effects in the fixed default profile.
-- Tiny icon-only targets with no focus or accessible name.
-- Calendar arrows, dates, settings rows, or plugin controls that only look
-  interactive.
-- Low-opacity text over an uncontrolled wallpaper.
-- Multiple accent families competing in one surface.
-- Spring or physics claims unsupported by the native engine.
-- Separate visual systems for login, lock, and desktop.
-- Branding claims that imply Apple or Anthropic endorsement.
+Runtime and XRY evidence are recorded separately in [Testing](TESTING.md).
+See also [Motion](MOTION.md), [Theming](THEMING.md), and
+[Accessibility](ACCESSIBILITY.md).

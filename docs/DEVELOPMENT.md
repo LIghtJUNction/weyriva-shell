@@ -1,125 +1,111 @@
 # Development
 
-This is the entry point for contributors working on Weyriva itself. Weyriva is
-an opinionated distribution around the upstream Noctalia v5 shell, not a second
-desktop-shell implementation. Changes must preserve one owner for every visible
-surface and one deterministic installation profile.
-
-The repository is still under acceptance. Passing local checks does not prove
-that login, lock recovery, plugin rendering, or the complete desktop has passed
-on XRY hardware. Those gates are tracked in
-[Noctalia parity](NOCTALIA_PARITY.md).
+Weyriva is migrating from a Noctalia-delegating scaffold to an independent
+Quickshell 0.3 / QtQuick shell. New work must advance the independent
+architecture and must not deepen or document the transitional delegation as a
+stable product API.
 
 ## Repository map
 
-| Path | Owner and purpose |
-| --- | --- |
-| `bin/weyriva` | Weyriva CLI, isolated Noctalia delegation, diagnostics, and the legacy local IPC lane |
-| `config/noctalia/` | Fixed declarative shell profile and offline fallback palette |
-| `config/niri/` | Niri compositor defaults and user-facing key bindings |
-| `config/greetd/` | System template for the hidden login broker |
-| `assets/` | Project-owned wallpapers and desktop/session assets |
-| `systemd/` | Graphical-session-bound user services and recovery units |
-| `scripts/` | Installation, update, validation, and maintainer helpers |
-| `packaging/aur/` | Arch/AUR packaging source |
-| `tests/` | Standard-library unit and contract tests |
-| `docs/` | Architecture, design, protocol, lifecycle, and acceptance contracts |
+Current repository-owned areas:
 
-Noctalia owns the bar, tray, launcher, dock, control center, notifications,
-wallpaper, OSD, settings, lock screen, idle policy, screenshots, desktop
-widgets, and current v5 plugin rendering. Weyriva owns distribution defaults,
-Niri integration, login/session wiring, install/update behavior, diagnostics,
-and the reserved `weyriva.*` namespace. Do not add a parallel Waybar, mako,
-wallpaper host, lock host, or plugin UI runtime.
+| Path | Role |
+|---|---|
+| `bin/weyriva` | CLI, diagnostics, local JSON IPC, and migration helpers |
+| `shell/` | native Quickshell desktop and lock source; integration in progress |
+| `greeter/` | native Quickshell greetd client source; system acceptance pending |
+| `config/weyriva/` | project-owned deterministic defaults |
+| `config/niri/` | Niri session policy and bindings |
+| `config/greetd/` | privileged broker template; not the visible greeter |
+| `systemd/` | current user-session service scaffolding |
+| `scripts/`, `install.sh` | zero-choice installation and update scaffolding |
+| `tests/` | repository-level regression tests |
+| `docs/` | architecture, behavior, compatibility, and acceptance contracts |
 
-## Isolated profile
+The earlier `config/noctalia/` runtime profile has been removed from the live
+tree and is a forbidden legacy path for new work. The native source is still a
+migration-stage implementation: its presence does not establish complete
+surface or system behavior.
 
-`weyriva shell` starts Noctalia with three Weyriva-specific roots:
+## Architecture rules
 
-```text
-NOCTALIA_CONFIG_HOME = $XDG_CONFIG_HOME/weyriva
-NOCTALIA_STATE_HOME  = $XDG_STATE_HOME/weyriva
-NOCTALIA_DATA_HOME   = $XDG_DATA_HOME/weyriva
-```
-
-Noctalia appends `/noctalia`, so the normal configuration is
-`$XDG_CONFIG_HOME/weyriva/noctalia/config.toml` and GUI/IPC overrides are in
-`$XDG_STATE_HOME/weyriva/noctalia/settings.toml`. The latter loads last and can
-override the packaged profile. The upstream merge and export rules are pinned
-in the [Noctalia configuration reference](https://github.com/noctalia-dev/noctalia-docs/blob/f88820cc90170ceb212efdea87711802ebaca1c9/src/content/docs/v5/configuration/index.mdx).
-
-Never diagnose Weyriva by inspecting only a standalone
-`~/.config/noctalia/` profile.
+- Weyriva owns every visible surface.
+- greetd owns PAM/VT/session privilege only.
+- Niri owns compositing and workspace policy.
+- platform adapters do not manipulate presentation components directly.
+- state and actions are typed and testable.
+- one visible surface has one lifecycle owner.
+- Noctalia is public reference material only.
+- plugins are trusted code but still receive bounded, isolated runtimes where
+  the ABI permits.
 
 ## Normal edit loop
 
-Run focused tests while editing:
-
 ```bash
 make test
-```
-
-Run the repository check before handoff:
-
-```bash
 make check
 ```
 
-The check includes Python tests, shell syntax and static policy checks, Niri
-validation when Niri is installed, and an isolated `noctalia config validate`
-when Noctalia is installed. A skipped optional runtime is not a pass for its
-acceptance gate.
+Use the narrowest relevant test while iterating, then the full repository
+checks before handoff. Quickshell syntax, QML imports, runtime rendering, and
+Wayland input require their own validation once the native tree is present.
 
-Inspect the effective Weyriva profile without editing app-managed state:
+For a surface change:
 
-```bash
-weyriva shell config validate
-weyriva shell config export full
-```
+1. identify state, actions, focus ownership, and failure states;
+2. define the intended end state and shared component use;
+3. implement the smallest coherent slice;
+4. verify pointer and keyboard behavior;
+5. verify loading, empty, disabled, error, and completion states;
+6. capture runtime evidence on the target environment.
 
-For a running development session, Noctalia watches both configuration layers.
-An explicit reload is also available:
+## Clean-room compatibility
 
-```bash
-weyriva shell msg config-reload
-weyriva shell msg status
-```
+Noctalia-compatible plugin work uses public documentation, public manifests,
+installed tool output, and self-authored behavioral fixtures. Do not copy
+Noctalia shell implementation source into Weyriva.
 
-Do not delete `settings.toml` as a routine debugging step. First inspect it and
-the exported effective configuration; it is user-owned runtime state.
+Separate:
 
-## Safe boundaries
+- public ABI facts;
+- Weyriva implementation choices;
+- behavior that still requires a black-box probe.
 
-- Keep package, installer, systemd, session, and documentation claims aligned.
-- Do not rewrite PAM. Weyriva relies on the distribution's greetd PAM stack.
-- Do not add autologin or remove the TTY recovery path.
-- Do not invoke delegated plugin or shell commands through a shell string.
-- Do not claim an API range broader than the installed Noctalia engine reports.
-- Do not call a source-inspection result a live desktop pass.
-- Preserve unrelated worktree changes and user configuration.
-- Treat all native and legacy plugins as trusted user code, not sandboxed code.
+See [Plugin compatibility](plugins/compatibility-contract.md).
 
-## Design and implementation references
+## Security boundaries
 
-- [Design system](DESIGN_SYSTEM.md)
-- [Theming](THEMING.md)
-- [Motion](MOTION.md)
-- [Accessibility](ACCESSIBILITY.md)
-- [Session lifecycle](SESSION_LIFECYCLE.md)
-- [Developer experience](DEVELOPER_EXPERIENCE.md)
-- [IPC](IPC.md)
-- [Plugins](PLUGINS.md)
-- [Testing](TESTING.md)
+- do not rewrite or replace the distribution PAM policy;
+- do not enable autologin;
+- do not log passwords, tokens, clipboard secrets, or plugin credentials;
+- use argument arrays or typed protocol messages, never interpolated shell
+  strings;
+- acquire secure lock before reporting locked;
+- fail closed if lock ownership is uncertain;
+- do not broaden privileges for convenience.
+
+## Documentation discipline
+
+Every material claim uses one of:
+
+- **Implemented** — source plus local check;
+- **In progress** — architecture fixed, implementation incomplete;
+- **Planned** — accepted but not implemented;
+- **Verified** — executed in the environment named by the claim.
+
+When code and docs disagree, report the mismatch; do not silently describe the
+target as current behavior.
 
 ## Handoff evidence
 
-A development handoff reports:
+Report:
 
-1. files intentionally changed;
-2. checks that passed, failed, were skipped, or were not run;
-3. effective Noctalia version and profile roots when runtime behavior matters;
-4. whether login, lock, suspend, or systemd behavior was exercised;
-5. whether XRY pointer, keyboard, visual, and screenshot evidence exists;
-6. residual risks and the exact next required action.
+1. exact changed files;
+2. validation command and status;
+3. runtime/tool versions;
+4. whether login, lock, suspend, packaging, and plugins were exercised;
+5. whether XRY pointer, keyboard, screenshot, and log evidence exists;
+6. residual gaps and temporary migration artifacts.
 
-Do not stage or commit `SWAP.md`. It is temporary Planner continuity state.
+See [Architecture](ARCHITECTURE.md), [Testing](TESTING.md), and
+[Roadmap](ROADMAP.md).

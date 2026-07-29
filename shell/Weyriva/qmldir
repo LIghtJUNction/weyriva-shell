@@ -1,0 +1,6 @@
+singleton Theme 1.0 Theme.qml
+singleton ShellState 1.0 ShellState.qml
+ActionButton 1.0 ActionButton.qml
+BrandMark 1.0 BrandMark.qml
+SurfacePanel 1.0 SurfacePanel.qml
+WallpaperPreview 1.0 WallpaperPreview.qml

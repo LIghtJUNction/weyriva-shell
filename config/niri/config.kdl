@@ -22,15 +22,12 @@ prefer-no-csd
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
 binds {
-    Mod+Space { spawn "weyriva" "shell" "msg" "panel-toggle" "launcher"; }
-    Mod+N { spawn "weyriva" "shell" "msg" "notification-dnd-toggle"; }
-    Mod+B { spawn "weyriva" "shell" "msg" "bar-toggle"; }
-    Mod+C { spawn "weyriva" "shell" "msg" "panel-toggle" "control-center"; }
-    Mod+V { spawn "weyriva" "shell" "msg" "panel-toggle" "clipboard"; }
-    Mod+W { spawn "weyriva" "shell" "msg" "panel-toggle" "wallpaper"; }
-    Mod+Shift+T { spawn "weyriva" "shell" "msg" "theme-mode-toggle"; }
-    Mod+Shift+E { spawn "weyriva" "shell" "msg" "panel-toggle" "session"; }
-    Mod+Shift+X { spawn "weyriva" "shell" "msg" "session" "lock"; }
+    Mod+Space { spawn "weyriva" "shell" "route" "launcher"; }
+    Mod+N { spawn "weyriva" "shell" "route" "notifications"; }
+    Mod+C { spawn "weyriva" "shell" "route" "control-center"; }
+    Mod+W { spawn "weyriva" "shell" "route" "wallpaper"; }
+    Mod+Shift+T { spawn "weyriva" "shell" "route" "settings"; }
+    Mod+Shift+X { spawn "weyriva" "shell" "lock"; }
     Mod+Return { spawn "foot"; }
     Mod+Q { close-window; }
     Mod+H { focus-column-left; }
@@ -45,7 +42,7 @@ binds {
     Mod+Shift+1 { move-column-to-workspace 1; }
     Mod+Shift+2 { move-column-to-workspace 2; }
     Mod+Shift+3 { move-column-to-workspace 3; }
-    Print { spawn "weyriva" "shell" "msg" "screenshot-region"; }
+    Print { screenshot; }
 }
 
 window-rule {

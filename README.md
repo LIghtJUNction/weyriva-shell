@@ -1,68 +1,80 @@
 # Weyriva Shell
 
-Weyriva Shell (pronounced **way-REE-vuh**) is an Arch Linux-first,
-zero-configuration Niri desktop built around the upstream
-[Noctalia v5](https://github.com/noctalia-dev/noctalia) shell. One visual and
-lifecycle contract covers the login screen, authenticated lock screen, and
-desktop.
+Weyriva Shell (pronounced **way-REE-vuh**) is an Arch-first, zero-configuration
+Niri desktop whose shell, greeter, and lock surfaces are owned by Weyriva.
+The target runtime is an independent
+[Quickshell 0.3](https://quickshell.org/) / QtQuick implementation. It does not
+delegate desktop ownership to Noctalia.
 
-Noctalia Greeter is the visible login layer. greetd remains underneath as the
-hidden, narrowly scoped broker for VT ownership, PAM authentication, account
-transition, and session creation. Weyriva does not reimplement PAM, enable
-autologin, or remove the TTY recovery path.
+greetd remains the narrowly scoped system broker for VT ownership, PAM
+authentication, and session creation. It is not the visible product UI and
+Weyriva does not reimplement PAM.
 
-> **Status:** repository integration is active. A one-command source installer
-> exists, but the all-in-one login chain, packaged dependency path, complete
-> plugin catalogs, accessibility matrix, crash/lock recovery, and XRY visual and
-> click acceptance must pass before this project is called install-ready or
-> deployed. See the [parity ledger](docs/NOCTALIA_PARITY.md).
+> **Migration status:** the repository is being converted from an earlier
+> Noctalia-delegating scaffold to the independent shell described here. The
+> source installer, Niri profile, local control daemon, initial native
+> Quickshell shell/greeter sources, and repository checks exist. Native
+> surfaces, the integrated greeter and lock flow, compatible plugin execution,
+> final packaging, and XRY acceptance are not complete merely because those
+> scaffolds exist. See the
+> [compatibility ledger](docs/NOCTALIA_PARITY.md).
 
-## What it delivers
+## Product contract
 
-- Noctalia-owned bar, tray, launcher, dock, control center, notifications,
-  clipboard, wallpaper, OSD, settings, screenshots, lock/idle, desktop widgets,
-  and current v5 plugins;
-- Noctalia Greeter for a visually continuous login surface, with greetd hidden
-  behind the Weyriva product boundary;
-- one Niri/systemd user-session lifecycle with bounded shell recovery;
-- light, dark, and deterministic automatic mode with source-faithful,
-  gently saturated wallpaper-derived color;
-- Apple-inspired interaction hierarchy and motion, paired with project-owned
-  Anthropic-inspired editorial wallpaper and illustration;
-- keyboard-first vibe-coding defaults for terminal, launcher, workspaces,
-  clipboard, DND, theme, screenshots, status, and recovery;
-- one fixed profile and no installer personalization questionnaire.
+Weyriva is intended to provide one coherent product across:
 
-These are design influences, not endorsements. Weyriva is not affiliated with
-or sponsored by Apple, Anthropic, or Noctalia.
+- login, desktop, authenticated lock, suspend, logout, and recovery;
+- bar, tray, launcher, calendar, control center, notifications, clipboard,
+  wallpaper, OSD, settings, screenshots, and desktop widgets;
+- a native Weyriva control plane and versioned plugin compatibility layers;
+- a deterministic default profile with no installer questionnaire.
 
-## Install
+The design language combines two project-owned influences:
 
-Weyriva targets Linux/Niri/Wayland. Arch and Arch-family systems are primary,
-with AUR/systemd as the first packaging and service path. Fedora,
-Debian/Ubuntu, and openSUSE remain best effort where their repositories provide
-compatible Niri, Noctalia, Noctalia Greeter, greetd, and supporting packages.
+- Apple-inspired direct manipulation: immediate feedback, spatial continuity,
+  interruptible motion, and accessible reduced-motion alternatives;
+- Anthropic-inspired editorial art: bold uneven near-black linework, irregular
+  ivory carrier shapes, and one muted opaque accent field.
 
-From a checkout, the supported command is:
+These are design references, not copied products or endorsements. Weyriva is
+not affiliated with Apple, Anthropic, or Noctalia.
+
+## Status vocabulary
+
+Documentation uses four explicit states:
+
+| State | Meaning |
+|---|---|
+| **Implemented** | Present in the repository and covered by a relevant local check |
+| **In progress** | The intended architecture is fixed, but implementation or integration is incomplete |
+| **Planned** | Accepted scope with no sufficient implementation evidence yet |
+| **Verified** | Exercised in the real environment named by the claim, with recorded evidence |
+
+“Implemented” is not interchangeable with “verified.” In particular, local
+tests cannot prove login, PAM, Wayland input, secure lock ownership, plugin UI,
+or XRY behavior.
+
+## Installation
+
+The product goal is one command on supported Linux systems:
 
 ```bash
 ./install.sh
 ```
 
-The installer has no choices. It preserves replaced managed user files with
-timestamped backups and does not silently restart the active graphical session.
-Arch installation prefers configured repositories and may use an
-already-installed `paru` or `yay` as the invoking ordinary user; it does not
-bootstrap an AUR helper.
+There are no personalization prompts. Arch and Arch-family systems are the
+primary target; Fedora, Debian/Ubuntu, and openSUSE are best-effort targets.
+Users who need a different policy should fork the repository.
 
-The installer applies the fixed privileged login template without questions,
-backs up the previous template, enables the login service for the next boot,
-and never restarts the active graphical session. The packaged path installs the
-Noctalia Greeter session and keeps greetd as an internal broker. Until the
-gates in [Testing](docs/TESTING.md) pass, do not treat a successful file copy
-as a successful desktop deployment.
+The script exists today, but its dependency and session path are part of the
+active native-shell migration. Until the gates in [Testing](docs/TESTING.md)
+pass, treat it as an integration scaffold rather than a production-ready
+desktop installer. It must not restart an occupied graphical session without
+an explicit operational request.
 
-## Everyday controls
+## Intended everyday controls
+
+The fixed interaction contract is:
 
 ```text
 Mod+Space       launcher
@@ -79,50 +91,24 @@ Mod+H/J/K/L     focus navigation
 Mod+1/2/3       workspaces
 ```
 
-The exact workflow is in
-[Developer experience](docs/DEVELOPER_EXPERIENCE.md).
+These bindings describe the target product. Each surface remains unverified
+until pointer, keyboard, focus, and visible-state acceptance passes.
 
-## Shell and plugin control
+## Control and plugins
 
-`weyriva shell` always carries the isolated Weyriva config, state, and data
-roots:
+The current repository includes a versioned local JSON control daemon and a
+legacy executable-plugin lane. They are migration infrastructure, not the
+desktop renderer. The independent Quickshell runtime will own native surface
+IPC.
 
-```bash
-weyriva shell run
-weyriva shell config validate
-weyriva shell msg status
-weyriva shell msg panel-toggle launcher
-weyriva shell msg settings-toggle
-weyriva shell msg theme-mode-get
-weyriva shell msg color-scheme-get
-weyriva shell msg session lock
-```
+Noctalia is used only as a pinned public behavior and plugin-ABI reference.
+Weyriva must implement compatible behavior itself; catalog discovery or
+manifest parsing is not plugin compatibility. See:
 
-Current Noctalia v5 plugins run directly through the installed engine:
-
-```bash
-weyriva plugin list
-weyriva plugin install noctalia/screen_recorder
-weyriva plugin disable noctalia/screen_recorder
-weyriva plugin enable noctalia/screen_recorder
-weyriva plugin update official
-weyriva plugin source list
-```
-
-`plugin install ID` is an enable/materialize convenience. Noctalia v5 exposes
-disable, not per-plugin removal. The old Weyriva JSON executable lane remains
-explicitly legacy, and Noctalia v4 QML compatibility remains pending. See
-[Plugins](docs/PLUGINS.md).
-
-Weyriva's reserved local control plane is separate:
-
-```bash
-weyriva status
-weyriva diagnose
-weyriva diagnose --json
-weyriva ipc call weyriva.info
-weyriva ipc call weyriva.niri.outputs
-```
+- [Plugins](docs/PLUGINS.md)
+- [Compatibility contract](docs/plugins/compatibility-contract.md)
+- [Noctalia v5 Luau profile](docs/plugins/noctalia-v5-luau.md)
+- [Noctalia v4 QML profile](docs/plugins/noctalia-v4-qml.md)
 
 ## Development and acceptance
 
@@ -131,13 +117,13 @@ make test
 make check
 ```
 
-CI/local checks do not replace real login, lock, pointer, keyboard, plugin, or
-XRY acceptance.
+Repository checks are necessary but do not replace real login, lock, pointer,
+keyboard, plugin, packaging, or XRY evidence.
 
-Developer documentation:
+Documentation:
 
-- [Development](docs/DEVELOPMENT.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Development](docs/DEVELOPMENT.md)
 - [Session lifecycle](docs/SESSION_LIFECYCLE.md)
 - [Design system](docs/DESIGN_SYSTEM.md)
 - [Theming](docs/THEMING.md)
@@ -145,11 +131,11 @@ Developer documentation:
 - [Accessibility](docs/ACCESSIBILITY.md)
 - [Developer experience](docs/DEVELOPER_EXPERIENCE.md)
 - [IPC](docs/IPC.md)
-- [Plugins](docs/PLUGINS.md)
 - [Testing](docs/TESTING.md)
-- [Noctalia parity](docs/NOCTALIA_PARITY.md)
+- [Status and roadmap](docs/ROADMAP.md)
+- [Compatibility ledger](docs/NOCTALIA_PARITY.md)
 
-A concise Chinese overview is in
+A concise Chinese overview is available in
 [docs/README.zh-CN.md](docs/README.zh-CN.md).
 
 ## License

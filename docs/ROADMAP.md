@@ -1,55 +1,100 @@
 # Status and roadmap
 
-Weyriva is moving from a collection of separate desktop components to one
-Noctalia-powered Niri session. Milestones remain incomplete until their runtime
-acceptance gates pass.
+Weyriva is migrating to an independent Quickshell 0.3 / QtQuick shell. This
+roadmap is an acceptance sequence, not a list of completed marketing claims.
 
-## Current foundation
+## Current evidence
 
-- Noctalia v5 is the sole desktop-shell engine for the bar, launcher, panels,
-  notifications, wallpaper, OSD, lock screen, settings, and native Luau plugins.
-- Weyriva keeps an isolated Noctalia profile and its versioned `weyriva.*` IPC
-  namespace for compatibility with trusted executable plugins.
-- Noctalia Greeter is the visible login surface; greetd remains the internal PAM
-  and VT broker.
-- Niri owns the graphical-session lifecycle through systemd user units, with
-  bounded shell restart, lock reconciliation, and session-exit failsafe design.
-- The root one-command installer and AUR scaffold are the system installation
-  paths. The user-only installer manages profile data and does not install
-  service overrides.
-- Light and dark editorial assets, wallpaper-derived color, deterministic theme
-  scheduling, and a complete offline fallback palette are present in source.
+**Implemented in the repository**
 
-## Acceptance milestones
+- zero-choice `./install.sh` entry point and installation safety scaffolding;
+- Niri session configuration and fixed keybinding intent;
+- initial native Quickshell desktop, greeter, component, session-lock, and
+  shell-IPC source;
+- versioned local JSON IPC daemon and diagnostics;
+- bounded legacy executable-plugin handling;
+- repository tests and static checks;
+- the independent architecture and clean-room plugin compatibility contracts.
 
-1. **Noctalia v5 shell and native plugin integration**
-   - Complete the full settings/surface parity audit.
-   - Validate official and community plugin lifecycle behavior against pinned
-     upstream catalogs.
+**In progress**
 
-2. **Login, lock, and desktop lifecycle**
-   - Validate the Noctalia Greeter → greetd → Weyriva → Niri chain on supported
-     distributions.
-   - Qualify crash-loop recovery, locked-shell restart, TTY2 recovery, logout,
-     suspend, multi-monitor, and HiDPI behavior on real hardware.
+- removal of Noctalia runtime delegation and stale dependency/config paths;
+- completion and validation of the native Quickshell application and shared
+  component system;
+- bar, launcher, calendar, control center, notifications, wallpaper, OSD,
+  settings, screenshot, and desktop-widget surfaces;
+- Weyriva Greeter and integrated authenticated lock surface;
+- native IPC and Luau plugin compatibility.
 
-3. **Packaging and zero-configuration installation**
-   - Build and install the AUR package in a clean Arch environment.
-   - Exercise the one-command installer on Arch-family systems and verify
-     conservative failure on unsupported package/runtime combinations.
-   - Publish and maintain the package only after those gates pass.
+**Planned**
 
-4. **Legacy Noctalia v4 compatibility**
-   - Implement and isolate the QML compatibility host.
-   - Execute representative v4 plugins; manifest discovery alone is not
-     compatibility.
+- isolated v4 QML compatibility host;
+- clean Arch package build and publication;
+- verified best-effort installers on other distributions;
+- complete accessibility matrix;
+- XRY login, desktop, lock, recovery, visual, keyboard, and pointer acceptance.
 
-5. **Catalog and XRY acceptance**
-   - Run the pinned official/community catalog matrix across all entry kinds and
-     supported API boundaries.
-   - Install on XRY and complete visual, interaction, login, lock, recovery, and
-     runtime-log acceptance.
+Nothing in the second or third list is complete until the corresponding tests
+and environment evidence exist.
 
-The v4 compatibility, catalog matrix, AUR publication, and XRY acceptance gates
-are pending. Source implementation or local configuration validation does not
-make those milestones complete.
+## Milestones
+
+### M1 — Independent runtime
+
+- start one Weyriva Quickshell 0.3 process inside Niri;
+- remove Noctalia runtime/package/profile delegation;
+- establish typed state, surface routing, logs, and native IPC;
+- prove bounded startup and clean shutdown.
+
+Exit: shell starts without Noctalia installed and a native status surface
+responds to pointer, keyboard, and IPC.
+
+### M2 — Usable desktop surfaces
+
+- implement bar/tray, launcher, calendar, control center, notifications,
+  clipboard, wallpaper, OSD, settings, screenshots, and desktop widgets;
+- use one component library and shared theme tokens;
+- test empty, loading, error, disabled, pressed, focus, and success states.
+
+Exit: every visible control in the interaction matrix performs its action.
+
+### M3 — Login, lock, and recovery
+
+- implement Weyriva Greeter over greetd;
+- implement secure in-session lock with `ext-session-lock-v1`;
+- qualify idle, suspend, resume, logout, crash-loop, locked restart, and TTY
+  recovery;
+- fail closed when lock ownership cannot be established.
+
+Exit: cold-boot and recovery matrix passes on target hardware.
+
+### M4 — Plugin compatibility
+
+- implement documented v5 Luau API levels incrementally;
+- run self-authored fixtures for all six entry kinds, lifecycle, config, state,
+  IPC, persistence, and error isolation;
+- implement the v4 host only after the v5 path is stable.
+
+Exit: the compatibility matrix records execution evidence, not catalog
+presence.
+
+### M5 — Packaging and cross-distribution install
+
+- make the root script resolve only the independent Weyriva runtime;
+- build the Arch package in a clean environment;
+- prove rollback and preservation of unmanaged files;
+- document best-effort support based on real package availability.
+
+Exit: clean-machine install, update, and uninstall tests pass.
+
+### M6 — XRY acceptance
+
+- install the exact reviewed revision;
+- restart only the explicitly authorized unused desktop environment;
+- record screenshots, logs, pointer and keyboard results;
+- verify login, desktop, lock, suspend, recovery, and representative plugins.
+
+Exit: all required XRY evidence is attached and the Reviewer approves.
+
+See [Testing](TESTING.md) and
+[the compatibility ledger](NOCTALIA_PARITY.md).

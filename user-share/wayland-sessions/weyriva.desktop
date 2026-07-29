@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Weyriva
-Comment=Weyriva desktop shell powered by Noctalia and Niri
+Comment=Weyriva desktop shell for Niri
 Exec=/usr/bin/weyriva session start
 Type=Application
 DesktopNames=Weyriva;niri;

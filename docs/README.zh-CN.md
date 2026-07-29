@@ -1,133 +1,99 @@
 # Weyriva Shell 中文简介
 
-Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 Niri 构建的零配置
-Wayland 桌面。它使用上游
-[Noctalia v5](https://github.com/noctalia-dev/noctalia) 负责完整桌面 Shell 和
-会话内锁屏，并使用 Noctalia Greeter 提供统一视觉的登录界面。
+Weyriva Shell（读作 **way-REE-vuh**）是一个以 Arch 为主要目标、零配置的
+Niri 桌面环境。Weyriva 自己拥有 Shell、登录界面和会话内锁屏；目标运行时是
+独立的 Quickshell 0.3 / QtQuick 实现，不把桌面运行时委托给 Noctalia。
 
-greetd 不会被删除。它隐藏在 Weyriva 登录界面之后，只负责 VT/seat、PAM
-认证、用户身份切换和会话创建。Weyriva 不重写 PAM、不启用自动登录，并永久
-保留 TTY2 恢复通道。
+greetd 只在内部负责 VT、PAM 认证和创建会话。它不是可见产品界面，Weyriva
+也不会重写 PAM。
 
-> **当前状态：** 仓库集成仍在验收中。一键源码安装入口已经存在，但登录链、
-> Arch/AUR 打包、官方/社区插件全量矩阵、无障碍、锁屏崩溃恢复，以及 XRY
-> 实机视觉和点击证据都必须通过后，才能称为可安装、已部署或完整交付。详见
-> [Noctalia 对标验收表](NOCTALIA_PARITY.md)。
+> **迁移状态：** 仓库正在从早期 Noctalia 委托脚手架迁移到上述独立架构。
+> 一键安装脚本、Niri 配置、本地控制守护进程、初版原生 Quickshell
+> Shell/Greeter 源码和仓库检查已经存在；原生桌面 Surface、一体化 Greeter
+> 与锁屏、兼容插件执行、最终打包和 XRY 验收并未因此完成。详见
+> [兼容与验收表](NOCTALIA_PARITY.md)。
 
-## 一体化范围
+## 产品范围
 
-Noctalia 统一负责：
+Weyriva 的确定目标包括：
 
-- 多显示器 bar、组件、托盘、任务栏、媒体、网络、蓝牙、电池和亮度；
-- Dock、启动器、控制中心、通知与历史、剪贴板、壁纸、OSD 和截图；
-- 设置与热重载、桌面/锁屏组件、空闲策略、锁屏和会话操作；
-- `plugin.toml` + 可信 Luau 的原生 v5 插件。
+- 登录、桌面、认证锁屏、休眠、注销和故障恢复；
+- Bar、托盘、Launcher、日历、控制中心、通知、剪贴板、壁纸、OSD、设置、
+  截图和桌面组件；
+- Weyriva 原生控制协议与版本化插件兼容层；
+- 无安装问卷、无个性化选择的固定默认配置。
 
-Noctalia Greeter 是可见登录层；greetd 是隐藏的认证/会话 broker；Niri 是
-合成器。目标启动链为：
+文档统一使用四种状态：
 
-```text
-display-manager → greetd → noctalia-greeter-session
-→ Weyriva session → Niri/systemd user session
-→ weyriva-shell.service + weyriva-ipc.service
-```
+| 状态 | 含义 |
+|---|---|
+| **已实现** | 仓库中存在实现，并有对应本地检查 |
+| **迁移中** | 架构已经确定，但实现或集成尚未完成 |
+| **计划** | 已确认范围，但暂无足够实现证据 |
+| **已验证** | 已在声明的真实环境中执行，并留下证据 |
 
-Waybar、fuzzel、mako、swaybg、swaylock 和 swayidle 不得与 Noctalia 同时
-争用同一表面。
+“已实现”不等于“已验证”。本地测试不能证明 PAM、真实 Wayland 输入、安全
+锁屏、插件 UI 或 XRY 行为。
 
 ## 视觉与交互
 
-- `apple-design` 用于功能层级、系统字体、材料、立即反馈、空间连续性和动效；
-- `anthropic-art` 只用于项目自有的壁纸、登录/锁屏插画和空状态；
-- 两者都是设计参考，不代表 Apple、Anthropic 或 Noctalia 的隶属或背书；
-- 默认使用壁纸动态取色、较忠于源图且降低饱和度的 `soft` 生成器、
-  light/dark 和固定时间表的 auto 模式；
-- 主题和壁纸采用确定性的 400ms 淡入淡出，不使用随机特效；
-- reduced-motion 关闭 Shell 位移动画，并保留短淡入淡出或完全关闭壁纸过渡。
+Weyriva 保留两个项目自有的设计参考：
 
-详细规范：
+- Apple-inspired：按下即反馈、直接操控、空间连续、动画可中断，并提供降动效
+  等价反馈；
+- Anthropic-inspired：粗而略不规则的近黑手绘线、象牙色非规则承载形和一个
+  覆盖全画布的柔和强调色。
 
-- [设计系统](DESIGN_SYSTEM.md)
-- [主题](THEMING.md)
-- [动效](MOTION.md)
-- [无障碍](ACCESSIBILITY.md)
+它们是设计语言参考，不表示复制、隶属或背书。Weyriva 与 Apple、Anthropic、
+Noctalia 均无关联。
 
 ## 零配置安装
 
-Weyriva 仅支持 Linux/Niri/Wayland。Arch 和 Arch 系是首要路径，
-Arch/AUR/systemd 是第一打包与服务目标。Fedora、Debian/Ubuntu 和
-openSUSE 只有在原生仓库具备兼容依赖时才尽力支持。
-
-从检出目录执行：
+目标安装方式只有一个：
 
 ```bash
 ./install.sh
 ```
 
-安装器不提问、不提供个性化选项，并在替换受管用户文件前创建时间戳备份。
-它不会静默重启当前图形会话。需要不同终端、合成器、认证架构、工作区模型或
-整体视觉策略时，请 Fork 并维护自己的发行版。
+不提供个性化问卷。Arch 及其衍生发行版是主要目标；Fedora、
+Debian/Ubuntu 和 openSUSE 尽量支持。需要其他策略的用户应自行 Fork。
 
-安装完成不等于实机验收完成。系统登录配置需要权限，必须在应用前审阅；
-完整步骤见 [测试与验收](TESTING.md)。
+脚本目前已经存在，但依赖与会话链仍在原生迁移范围内。在
+[测试与验收](TESTING.md)通过之前，它是集成脚手架，不是生产就绪安装器。
+安装过程不得在没有明确运维请求时重启正在使用的图形会话。
 
-## Vibe-coding 默认操作
+## 目标快捷键
 
 ```text
-Mod+Space       启动器
-Mod+Return      Foot 终端
+Mod+Space       Launcher
+Mod+Return      终端
 Mod+V           剪贴板历史
-Mod+C           控制中心/系统状态
-Mod+N           免打扰
-Mod+Shift+T     light/dark 手动切换
+Mod+C           控制中心
+Mod+N           勿扰模式
+Mod+Shift+T     明暗主题
 Mod+W           壁纸
-Mod+Shift+E     会话与恢复操作
+Mod+Shift+E     会话与恢复
 Mod+Shift+X     锁屏
 Print           区域截图
-Mod+H/J/K/L     焦点导航
+Mod+H/J/K/L     焦点移动
 Mod+1/2/3       工作区
 ```
 
-详见 [开发者体验](DEVELOPER_EXPERIENCE.md)。
+这些是产品交互合同，不是“按钮已可用”的声明。每个 Surface 都必须通过
+鼠标、键盘、焦点和可见状态验收。
 
-## Shell 与插件
+## Shell、IPC 与插件
 
-`weyriva shell` 始终使用隔离的 Weyriva 配置、状态和数据目录：
+仓库当前包含版本化本地 JSON 控制守护进程和 legacy 可执行插件通道。它们是
+迁移基础设施，不是桌面渲染器。独立 Quickshell 运行时将拥有原生 Surface IPC。
 
-```bash
-weyriva shell config validate
-weyriva shell msg status
-weyriva shell msg panel-toggle launcher
-weyriva shell msg theme-mode-get
-weyriva shell msg color-scheme-get
-weyriva shell msg session lock
-```
+Noctalia 只作为固定提交的公开行为与插件 ABI 参考。Weyriva 必须自行实现兼容
+行为；能列出 catalog 或解析 manifest 不等于插件兼容。
 
-当前 Noctalia v5 插件直接交给已安装的同一引擎：
-
-```bash
-weyriva plugin list
-weyriva plugin install noctalia/screen_recorder
-weyriva plugin disable noctalia/screen_recorder
-weyriva plugin enable noctalia/screen_recorder
-weyriva plugin update official
-```
-
-`plugin install ID` 是 enable/materialize 的零配置别名。Noctalia v5 没有
-逐插件 remove；disable 不等于删除。旧 Weyriva JSON 可执行插件只保留在明确
-标注的 legacy 通道。Noctalia v4 QML 需要独立 Quickshell companion host，
-目前仍未实现、未兼容。详见 [插件](PLUGINS.md)。
-
-Weyriva 自己的本地 JSON IPC 与原生 Noctalia IPC 是两条不同通道：
-
-```bash
-weyriva diagnose
-weyriva diagnose --json
-weyriva ipc call weyriva.info
-weyriva ipc call weyriva.niri.outputs
-```
-
-详见 [IPC](IPC.md)。
+- [插件总览](PLUGINS.md)
+- [插件兼容合同](plugins/compatibility-contract.md)
+- [Noctalia v5 Luau 兼容 profile](plugins/noctalia-v5-luau.md)
+- [Noctalia v4 QML 兼容 profile](plugins/noctalia-v4-qml.md)
 
 ## 开发与验收
 
@@ -136,12 +102,20 @@ make test
 make check
 ```
 
-本地检查通过不能代替真实登录、PAM、锁屏、按钮、日历、插件和 XRY 实机验收。
+本地检查不能代替真实登录、锁屏、按钮、日历、插件、打包与 XRY 实机验收。
 
-开发文档入口：
+主要文档：
 
-- [开发指南](DEVELOPMENT.md)
 - [架构](ARCHITECTURE.md)
+- [开发](DEVELOPMENT.md)
 - [会话生命周期](SESSION_LIFECYCLE.md)
-- [测试与验收](TESTING.md)
-- [Noctalia 对标验收表](NOCTALIA_PARITY.md)
+- [设计系统](DESIGN_SYSTEM.md)
+- [主题](THEMING.md)
+- [动效](MOTION.md)
+- [无障碍](ACCESSIBILITY.md)
+- [开发者体验](DEVELOPER_EXPERIENCE.md)
+- [IPC](IPC.md)
+- [插件](PLUGINS.md)
+- [测试](TESTING.md)
+- [路线图](ROADMAP.md)
+- [兼容与验收表](NOCTALIA_PARITY.md)

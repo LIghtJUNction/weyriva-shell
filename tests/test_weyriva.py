@@ -7,11 +7,11 @@ import importlib.util
 import io
 import json
 import os
+import re
+import socket
 import subprocess
 import sys
 import tempfile
-import threading
-import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -25,150 +25,258 @@ sys.modules[LOADER.name] = weyriva
 LOADER.exec_module(weyriva)
 
 
+def qml_sources() -> dict[Path, str]:
+    roots = (ROOT / "shell", ROOT / "greeter")
+    return {
+        path.relative_to(ROOT): path.read_text()
+        for root in roots
+        for path in root.rglob("*.qml")
+    }
+
+
+def qml_blocks(source: str, type_name: str) -> list[str]:
+    """Return balanced blocks for a QML type without depending on filenames."""
+    blocks: list[str] = []
+    pattern = re.compile(rf"\b{re.escape(type_name)}\s*\{{")
+    for match in pattern.finditer(source):
+        depth = 0
+        quoted = False
+        escaped = False
+        for index in range(match.end() - 1, len(source)):
+            character = source[index]
+            if escaped:
+                escaped = False
+                continue
+            if character == "\\" and quoted:
+                escaped = True
+                continue
+            if character == '"':
+                quoted = not quoted
+                continue
+            if quoted:
+                continue
+            if character == "{":
+                depth += 1
+            elif character == "}":
+                depth -= 1
+                if depth == 0:
+                    blocks.append(source[match.start():index + 1])
+                    break
+    return blocks
+
+
 class InstallerTests(unittest.TestCase):
-    def test_canonical_installer_is_executable_and_uses_all_supported_managers(self) -> None:
-        installer = ROOT / "install.sh"
-        content = installer.read_text()
-        self.assertTrue(installer.is_file())
-        self.assertTrue(os.access(installer, os.X_OK))
-        for manager in ("pacman", "dnf", "apt-get", "zypper"):
-            self.assertIn(manager, content)
-        self.assertIn("pacman -S --noconfirm --needed", content)
-        self.assertIn("noctalia", content)
-        self.assertIn("noctalia-greeter", content)
-        self.assertIn('pacman -Si "$package_name"', content)
-        self.assertIn("run_as_invoking_user", content)
-        self.assertIn("SUDO_USER", content)
-        for helper in ("paru", "yay"):
-            self.assertIn(helper, content)
-        self.assertNotIn("curl", content)
-        for retired in ("waybar", "fuzzel", "mako", "swaybg", "swaylock", "swayidle"):
-            self.assertNotRegex(content, rf"pacman -S [^\n]*\b{retired}\b")
-
-    def test_canonical_installer_applies_system_install_after_runtime_gating(self) -> None:
-        content = (ROOT / "install.sh").read_text()
-        self.assertIn('scripts/install-system.sh" --user "$desktop_user"', content)
-        self.assertLess(
-            content.index('command -v "$command_name"'),
-            content.index('scripts/install-system.sh" --user "$desktop_user"'),
-        )
-        self.assertLess(content.index("systemd_version="), content.index("case ${managers[0]}"))
-        self.assertLess(
-            content.index('SCRIPT_DIR=$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)'),
-            content.index("case ${managers[0]}"),
-        )
-        self.assertLess(
-            content.index('"$SCRIPT_DIR/scripts/install-system.sh"'),
-            content.index("case ${managers[0]}"),
-        )
-        self.assertLess(
-            content.index('run_as_invoking_user "$aur_helper" -Si "$package_name"'),
-            content.index("run_as_root pacman -S --noconfirm --needed"),
-        )
-        self.assertIn("repository_packages=(niri greetd foot noto-fonts)", content)
-        for manager in ("dnf install", "apt-get install", "zypper --non-interactive install"):
-            line = next(line for line in content.splitlines() if manager in line)
-            self.assertIn("greetd", line)
-        self.assertNotIn("systemctl --user stop", content)
-
-    def test_arch_aur_plan_failure_happens_before_pacman_mutation(self) -> None:
+    def _run_fake_arch(self, installed: tuple[str, ...]) -> tuple[subprocess.CompletedProcess[str], str]:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            log = root / "calls.log"
+            fake_root = Path(temporary)
+            log = fake_root / "calls.log"
+            generic_installed = fake_root / "generic-quickshell"
+            installed_cases = "|".join(installed)
+            installed_words = " ".join(installed)
 
-            def executable(name: str, body: str) -> None:
-                path = root / name
+            def executable(name: str, body: str = "exit 0\n") -> None:
+                path = fake_root / name
                 path.write_text("#!/usr/bin/bash\nset -eu\n" + body)
                 path.chmod(0o755)
 
             executable("uname", "printf '%s\\n' Linux\n")
-            executable("id", "exit 0\n")
+            executable("id")
             executable(
                 "systemctl",
-                "[[ ${1:-} == --version ]] && printf '%s\\n' 'systemd 261' && exit 0\nexit 1\n",
+                "[[ ${1:-} == --version ]] && printf '%s\\n' 'systemd 261' && exit 0\n"
+                "exit 1\n",
             )
             executable(
                 "pacman",
                 f"printf 'pacman %s\\n' \"$*\" >>'{log}'\n"
-                "if [[ ${1:-} == -Si ]]; then\n"
-                "  case ${2:-} in niri|greetd|foot|noto-fonts) exit 0;; *) exit 1;; esac\n"
+                "if [[ ${1:-} == -Qq ]]; then\n"
+                "  if [[ $# == 1 ]]; then\n"
+                f"    printf '%s\\n' {installed_words}\n"
+                "    printf '%s\\n' quickshell\n"
+                "    exit 0\n"
+                "  fi\n"
+                f"  case ${{2:-}} in {installed_cases}) exit 0;; esac\n"
+                f"  [[ ${{2:-}} == quickshell && -f '{generic_installed}' ]] && exit 0\n"
+                "  exit 1\n"
                 "fi\n"
+                "[[ ${1:-} == -Si || ${1:-} == -Sp ]] && exit 0\n"
+                "[[ ${1:-} == -R && ${2:-} == --print ]] && exit 0\n"
                 "exit 99\n",
             )
             executable(
-                "paru",
-                f"printf 'paru %s\\n' \"$*\" >>'{log}'\n"
-                "[[ ${1:-} == -Si && ${2:-} == noctalia ]] && exit 0\n"
-                "exit 1\n",
+                "sudo",
+                f"printf 'sudo %s\\n' \"$*\" >>'{log}'\n"
+                "if [[ ${1:-} == pacman && ${2:-} == -S ]]; then\n"
+                "  for argument in \"$@\"; do\n"
+                "    if [[ $argument == quickshell ]]; then\n"
+                f"      : >'{generic_installed}'\n"
+                "    fi\n"
+                "  done\n"
+                "fi\n"
+                "exit 0\n",
             )
-            executable("sudo", "exit 99\n")
-            (root / "awk").symlink_to("/usr/bin/awk")
+            for command in ("niri", "niri-session", "quickshell", "cage", "foot"):
+                executable(command)
+            (fake_root / "awk").symlink_to("/usr/bin/awk")
+            (fake_root / "grep").symlink_to("/usr/bin/grep")
+
             completed = subprocess.run(
                 ["/usr/bin/bash", str(ROOT / "install.sh")],
-                env={"PATH": str(root), "USER": "tester"},
+                env={"PATH": str(fake_root), "USER": "tester"},
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            self.assertNotEqual(completed.returncode, 0)
-            calls = log.read_text()
-            self.assertIn("paru -Si noctalia", calls)
-            self.assertIn("paru -Si noctalia-greeter", calls)
-            self.assertNotIn("pacman -S --", calls)
+            return completed, log.read_text()
 
-    def test_system_installer_is_root_owned_bounded_and_never_restarts_login(self) -> None:
-        installer = ROOT / "scripts/install-system.sh"
+    def test_canonical_installer_is_zero_choice_and_cross_distribution(self) -> None:
+        installer = ROOT / "install.sh"
         content = installer.read_text()
         self.assertTrue(os.access(installer, os.X_OK))
+        self.assertIn("if [[ $# -ne 0 ]]", content)
+        for manager in ("pacman", "dnf", "apt-get", "zypper"):
+            self.assertIn(manager, content)
+        for dependency in ("niri", "greetd", "quickshell", "cage", "foot"):
+            self.assertIn(dependency, content)
+        self.assertNotIn("read -", content)
+        self.assertNotIn("select ", content)
+        self.assertNotIn("curl", content)
+
+    def test_arch_migration_uses_safe_exact_transactions(self) -> None:
+        content = (ROOT / "install.sh").read_text()
+        self.assertIn(
+            "for package_name in cachyos-niri-noctalia noctalia-shell",
+            content,
+        )
+        self.assertIn('run_as_root pacman -R --noconfirm "${blocking_packages[@]}"', content)
+        self.assertIn("pacman -R --print --print-format '%n'", content)
+        self.assertIn("run_as_root pacman -S --noconfirm --needed quickshell", content)
+        self.assertIn("pacman -Qq | grep -Fx quickshell", content)
+        self.assertNotIn("noctalia-qs", content)
+        self.assertNotIn("pacman -Rns", content)
+        self.assertLess(
+            content.index("pacman -Sp --print-format"),
+            content.index('nonconflicting_packages='),
+        )
+
+    def test_arch_xry_meta_chain_is_preflighted_then_replaced(self) -> None:
+        completed, calls = self._run_fake_arch(
+            ("cachyos-niri-noctalia", "noctalia-shell", "noctalia-qs")
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        resolution = "pacman -Sp --print-format %n niri greetd quickshell cage foot noto-fonts"
+        dependencies = "sudo pacman -S --noconfirm --needed niri greetd cage foot noto-fonts"
+        preflight = "sudo " + str(ROOT / "scripts/install-system.sh") + " --preflight --user tester"
+        removal = (
+            "sudo pacman -R --noconfirm "
+            "cachyos-niri-noctalia noctalia-shell"
+        )
+        replacement = "sudo pacman -S --noconfirm --needed quickshell"
+        removal_preflight = (
+            "pacman -R --print --print-format %n "
+            "cachyos-niri-noctalia noctalia-shell"
+        )
+        for expected in (
+            resolution,
+            dependencies,
+            preflight,
+            removal_preflight,
+            removal,
+            replacement,
+        ):
+            self.assertIn(expected, calls)
+        self.assertLess(calls.index(resolution), calls.index(dependencies))
+        self.assertLess(calls.index(dependencies), calls.index(preflight))
+        self.assertLess(calls.index(preflight), calls.index(removal_preflight))
+        self.assertLess(calls.index(removal_preflight), calls.index(removal))
+        self.assertLess(calls.index(removal), calls.index(replacement))
+        self.assertNotIn("noctalia-qs", removal)
+        self.assertNotIn("-Rns", calls)
+
+    def test_arch_generic_quickshell_consumer_is_preserved(self) -> None:
+        completed, calls = self._run_fake_arch(
+            ("greetd-dms-greeter-git", "noctalia-qs")
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("sudo pacman -S --noconfirm --needed quickshell", calls)
+        self.assertNotIn("sudo pacman -R", calls)
+        self.assertNotIn("greetd-dms-greeter-git", calls)
+        self.assertIn(
+            "sudo " + str(ROOT / "scripts/install-system.sh")
+            + " --preflight --user tester",
+            calls,
+        )
+
+    def test_system_installer_preflights_before_mutating(self) -> None:
+        content = (ROOT / "scripts/install-system.sh").read_text()
         self.assertIn("[[ $EUID -eq 0 ]]", content)
-        self.assertIn("systemd_version", content)
         self.assertIn("systemd-analyze --user verify", content)
         self.assertIn('runuser -u "$TARGET_USER"', content)
-        self.assertIn('XDG_RUNTIME_DIR="/run/user/$target_uid"', content)
-        self.assertIn("systemctl cat greetd.service", content)
-        self.assertIn("noctalia config validate", content)
-        self.assertIn("/usr/bin/weyriva startup ensure --user", content)
-        self.assertIn("niri.service.wants", content)
         self.assertIn("/etc/pam.d/greetd", content)
-        self.assertIn("getent group greeter", content)
+        self.assertIn("niri.service.wants", content)
         apply_loop = 'for index in "${!install_sources[@]}"; do\n    install_system_file'
-        self.assertLess(
-            content.index("/etc/pam.d/greetd"),
-            content.index(apply_loop),
-        )
-        self.assertLess(
-            content.index('fail "refusing to replace unexpected niri wants entry'),
-            content.index(apply_loop),
-        )
-        self.assertLess(content.index("startup_backup_root="), content.index(apply_loop))
+        self.assertLess(content.index("/etc/pam.d/greetd"), content.index(apply_loop))
         self.assertLess(
             content.index('niri validate -c "$effective_niri_config"'),
             content.index(apply_loop),
         )
+        guard = "if [[ $PREFLIGHT == true ]]; then"
+        self.assertIn(guard, content)
+        self.assertLess(content.index(guard), content.index("backup_existing()"))
+        self.assertLess(content.index(guard), content.index(apply_loop))
+        self.assertIn("--preflight", content.split(guard, 1)[0])
         self.assertNotIn("systemctl restart", content)
-        self.assertNotIn("systemctl --user start", content)
+
+    def test_aur_package_uses_only_independent_runtime(self) -> None:
+        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
+        srcinfo = (ROOT / "packaging/aur/.SRCINFO").read_text()
+        for dependency in ("niri", "greetd", "quickshell>=0.3", "cage", "foot"):
+            self.assertIn(f"'{dependency}'", package)
+        for dependency in ("niri", "greetd", "quickshell>=0.3", "cage", "foot"):
+            self.assertIn(f"\tdepends = {dependency}\n", srcinfo)
+        self.assertIn('cp -a shell "$pkgdir/usr/share/weyriva/"', package)
+        self.assertIn('cp -a greeter "$pkgdir/usr/share/weyriva/"', package)
+        self.assertIn('cp -a config/weyriva "$pkgdir/usr/share/weyriva/config/"', package)
+        self.assertNotIn("noctalia", package.lower())
+        self.assertNotIn("noctalia", srcinfo.lower())
+
+    def test_system_package_plans_complete_shell_greeter_and_config_trees(self) -> None:
+        installer = (ROOT / "scripts/install-system.sh").read_text()
+        required_trees = {
+            "shell": (
+                ROOT / "shell/shell.qml",
+                ROOT / "shell/Weyriva/qmldir",
+                ROOT / "shell/Weyriva/ActionButton.qml",
+                ROOT / "shell/Weyriva/ShellState.qml",
+                ROOT / "shell/Weyriva/SurfacePanel.qml",
+                ROOT / "shell/Weyriva/Theme.qml",
+            ),
+            "greeter": (ROOT / "greeter/shell.qml",),
+            "config/weyriva": (ROOT / "config/weyriva/defaults.json",),
+        }
         self.assertIn(
-            '"enable", "--force", "greetd.service"',
-            (ROOT / "bin/weyriva").read_text(),
+            'for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/config/weyriva"',
+            installer,
         )
+        self.assertIn('"/usr/share/weyriva/$relative"', installer)
+        for tree, paths in required_trees.items():
+            with self.subTest(tree=tree):
+                self.assertTrue(all(path.is_file() for path in paths))
 
-    def test_user_installer_never_installs_system_service_overrides(self) -> None:
-        content = (ROOT / "scripts/install.sh").read_text()
-        self.assertNotIn('install_tree "$WEYRIVA_ROOT/systemd"', content)
-        self.assertNotIn("SYSTEMD_HOME", content)
-        self.assertIn("remove_obsolete_managed", content)
+    def test_user_installer_manages_shell_and_config_but_not_system_greeter(self) -> None:
+        installer = (ROOT / "scripts/install.sh").read_text()
+        self.assertIn('install_tree "$WEYRIVA_ROOT/config/weyriva" "$CONFIG_HOME/weyriva"', installer)
+        self.assertIn('install_tree "$WEYRIVA_ROOT/shell" "$DATA_HOME/weyriva/shell"', installer)
+        self.assertNotIn('install_tree "$WEYRIVA_ROOT/greeter"', installer)
+        self.assertNotIn("systemd/user", installer)
 
-    def test_user_installer_retires_a_previously_managed_service_override(self) -> None:
+    def test_user_install_preserves_unmanaged_identical_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
-            override = home / "config/systemd/user/weyriva-shell.service"
-            override.parent.mkdir(parents=True)
-            payload = (ROOT / "systemd/weyriva-shell.service").read_bytes()
-            override.write_bytes(payload)
-            state = home / "state/weyriva/installed-files.tsv"
-            state.parent.mkdir(parents=True)
-            digest = hashlib.sha256(payload).hexdigest()
-            state.write_text(f"{digest}\t{override}\n")
+            destination = home / "config/weyriva/defaults.json"
+            destination.parent.mkdir(parents=True)
+            payload = (ROOT / "config/weyriva/defaults.json").read_bytes()
+            destination.write_bytes(payload)
             environment = {
                 **os.environ,
                 "HOME": str(home),
@@ -183,748 +291,210 @@ class InstallerTests(unittest.TestCase):
                 text=True,
                 check=True,
             )
-            self.assertFalse(override.exists())
-            self.assertNotIn(str(override), state.read_text())
-
-    def test_aur_package_uses_noctalia_as_the_only_shell_engine(self) -> None:
-        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
-        self.assertNotIn("ttf-nerd-fonts-symbols-mono", package)
-        self.assertIn("'noctalia'", package)
-        self.assertIn("'noctalia-greeter'", package)
-        self.assertIn("'systemd>=254'", package)
-        self.assertIn("'greetd'", package)
-        self.assertNotIn("'greetd-tuigreet'", package)
-        srcinfo = (ROOT / "packaging/aur/.SRCINFO").read_text()
-        self.assertIn("\tdepends = greetd\n", srcinfo)
-        for retired in ("waybar", "fuzzel", "mako", "swaybg", "swaylock", "swayidle"):
-            self.assertNotIn(f"'{retired}'", package)
-
-    def test_retired_component_configs_are_absent_from_source_and_installers(self) -> None:
-        retired = ("waybar", "fuzzel", "mako", "swaylock")
-        installer = (ROOT / "scripts/install.sh").read_text()
-        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
-        for component in retired:
-            with self.subTest(component=component):
-                component_root = ROOT / "config" / component
-                self.assertFalse(component_root.is_dir() and any(component_root.rglob("*")))
-                self.assertNotIn(f"config/{component}", installer)
-                self.assertNotIn(f"config/{component}", package)
-        self.assertIn('config/noctalia', installer)
-        self.assertIn('config/noctalia', package)
+            manifest = home / "state/weyriva/installed-files.tsv"
+            self.assertNotIn(str(destination), manifest.read_text())
+            self.assertEqual(hashlib.sha256(destination.read_bytes()).digest(),
+                             hashlib.sha256(payload).digest())
 
 
-class ProtocolTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.registry = weyriva.PluginRegistry({}, (), ())
-
-    def test_ping_round_trip_shape(self) -> None:
-        response = weyriva.process_request(
-            {"protocol": 1, "id": "test", "method": "weyriva.ping", "params": {}}, self.registry
+class IndependentShellTests(unittest.TestCase):
+    def test_runtime_sources_have_no_legacy_shell_dependency(self) -> None:
+        runtime_roots = (
+            ROOT / "bin",
+            ROOT / "config",
+            ROOT / "greeter",
+            ROOT / "packaging",
+            ROOT / "shell",
+            ROOT / "systemd",
+            ROOT / "user-share",
         )
-        self.assertEqual(response["id"], "test")
-        self.assertEqual(response["result"], {"pong": True, "protocol": 1})
+        runtime_paths = [
+            path
+            for root in runtime_roots
+            for path in root.rglob("*")
+            if path.is_file()
+        ]
+        runtime_paths.extend((ROOT / "scripts/install-system.sh", ROOT / "scripts/install.sh"))
+        for path in runtime_paths:
+            with self.subTest(path=path.relative_to(ROOT)):
+                try:
+                    content = path.read_text()
+                except UnicodeDecodeError:
+                    continue
+                self.assertNotIn("noctalia", content.lower())
+        self.assertFalse((ROOT / "config/noctalia").exists())
 
-    def test_unsupported_protocol_is_structured(self) -> None:
-        response = weyriva.process_request(
-            {"protocol": 99, "id": 7, "method": "weyriva.ping"}, self.registry
-        )
-        self.assertEqual(response["error"]["code"], "unsupported_protocol")
+        canonical_installer = (ROOT / "install.sh").read_text().lower()
+        self.assertIn("cachyos-niri-noctalia", canonical_installer)
+        self.assertIn("noctalia-shell", canonical_installer)
+        self.assertNotIn("noctalia-qs", canonical_installer)
 
-    def test_unknown_method_is_structured(self) -> None:
-        response = weyriva.process_request(
-            {"protocol": 1, "id": 8, "method": "unknown.call"}, self.registry
-        )
-        self.assertEqual(response["error"]["code"], "method_not_found")
-
-
-class FramingTests(unittest.TestCase):
-    def _exchange(self, payload: bytes) -> dict[str, object]:
-        encoded = weyriva.process_line(payload, weyriva.PluginRegistry({}, (), ()))
-        return json.loads(encoded)
-
-    def test_unix_socket_accepts_one_json_line(self) -> None:
-        response = self._exchange(b'{"protocol":1,"id":2,"method":"weyriva.ping"}\n')
-        self.assertTrue(response["result"]["pong"])
-
-    def test_malformed_json_returns_parse_error(self) -> None:
-        response = self._exchange(b"not-json\n")
-        self.assertEqual(response["error"]["code"], "parse_error")
-
-
-class PluginTests(unittest.TestCase):
-    def _environment(self, root: Path) -> dict[str, str]:
-        return {
-            "HOME": str(root),
-            "XDG_CONFIG_HOME": str(root / "config"),
-            "XDG_DATA_HOME": str(root / "data"),
-            "XDG_DATA_DIRS": str(root / "system-data"),
-        }
-
-    def test_discovers_and_calls_relative_executable(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            plugins = root / "config/weyriva/plugins"
-            plugins.mkdir(parents=True)
-            executable = plugins / "echo.py"
-            executable.write_text("#!/usr/bin/env python3\nimport json,sys\njson.dump(json.load(sys.stdin),sys.stdout)\n")
-            executable.chmod(0o755)
-            (plugins / "echo.json").write_text(
-                json.dumps({"id": "test", "version": 1, "methods": {"test.echo": {"argv": ["./echo.py"]}}})
-            )
-            with mock.patch.dict(os.environ, self._environment(root), clear=False):
-                registry = weyriva.discover_plugins()
-            self.assertEqual(registry.errors, ())
-            self.assertEqual(weyriva.run_plugin(registry.methods["test.echo"], {"value": 4}), {"value": 4})
-
-    def test_rejects_reserved_and_duplicate_methods(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            plugins = root / "config/weyriva/plugins"
-            plugins.mkdir(parents=True)
-            base = {"id": "test", "version": 1, "methods": {"test.echo": {"argv": ["true"]}}}
-            duplicate = {"id": "test", "version": 1, "methods": {"test.echo": {"argv": ["true"]}}}
-            reserved = {"id": "bad", "version": 1, "methods": {"weyriva.steal": {"argv": ["true"]}}}
-            (plugins / "1.json").write_text(json.dumps(base))
-            (plugins / "2.json").write_text(json.dumps(duplicate))
-            (plugins / "3.json").write_text(json.dumps(reserved))
-            with mock.patch.dict(os.environ, self._environment(root), clear=False):
-                registry = weyriva.discover_plugins()
-            self.assertEqual(sorted(registry.methods), ["test.echo"])
-            self.assertEqual(len(registry.errors), 2)
-
-    def test_plugin_timeout_becomes_clear_error(self) -> None:
-        method = weyriva.PluginMethod("slow", "test.slow", ("sleep", "1"), 0.1, Path("slow.json"))
-        with self.assertRaisesRegex(weyriva.PluginError, "timed out"):
-            weyriva.run_plugin(method, {})
-
-    def test_plugin_output_limit_is_enforced_incrementally(self) -> None:
-        method = weyriva.PluginMethod(
-            "large",
-            "large.output",
-            (sys.executable, "-c", "import sys; sys.stdout.write('x' * (1024 * 1024 + 1))"),
-            2,
-            Path("large.json"),
-        )
-        with self.assertRaisesRegex(weyriva.PluginError, "stdout exceeds"):
-            weyriva.run_plugin(method, {})
-
-    def test_manifest_requires_version_and_own_namespace(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            plugins = root / "config/weyriva/plugins"
-            plugins.mkdir(parents=True)
-            (plugins / "missing-version.json").write_text(
-                json.dumps({"id": "demo", "methods": {"demo.call": {"argv": ["true"]}}})
-            )
-            (plugins / "wrong-namespace.json").write_text(
-                json.dumps({"id": "demo", "version": 1, "methods": {"other.call": {"argv": ["true"]}}})
-            )
-            with mock.patch.dict(os.environ, self._environment(root), clear=False):
-                registry = weyriva.discover_plugins()
-            self.assertEqual(len(registry.errors), 2)
-
-
-class DaemonSafetyTests(unittest.TestCase):
-    def test_second_lock_attempt_does_not_touch_socket_marker(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            lock_path = root / "daemon.lock"
-            socket_marker = root / "weyriva.sock"
-            socket_marker.write_text("live")
-            first = weyriva.acquire_daemon_lock(lock_path)
-            try:
-                with self.assertRaisesRegex(RuntimeError, "already running"):
-                    weyriva.acquire_daemon_lock(lock_path)
-                self.assertEqual(socket_marker.read_text(), "live")
-            finally:
-                first.close()
-
-    def test_handler_slots_reject_overload(self) -> None:
-        server = object.__new__(weyriva.IpcServer)
-        server._handler_slots = threading.BoundedSemaphore(1)
-        first = mock.Mock()
-        overload = mock.Mock()
-        self.assertTrue(server.verify_request(first, None))
-        self.assertFalse(server.verify_request(overload, None))
-        overload.close.assert_called_once_with()
-        server._handler_slots.release()
-
-
-class SessionLifecycleTests(unittest.TestCase):
-    def test_startup_ensure_parser(self) -> None:
-        arguments = weyriva.build_parser().parse_args(["startup", "ensure"])
-        self.assertEqual(arguments.command, "startup")
-        self.assertEqual(arguments.startup_command, "ensure")
-
-    def test_reconcile_startup_file_backs_up_existing_content(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "template.toml"
-            destination = root / "config.toml"
-            backup = root / "backups/config.toml"
-            source.write_text("new\n")
-            destination.write_text("old\n")
-            self.assertTrue(weyriva.reconcile_startup_file(source, destination, backup))
-            self.assertEqual(destination.read_text(), "new\n")
-            self.assertEqual(backup.read_text(), "old\n")
-            self.assertFalse(weyriva.reconcile_startup_file(source, destination, backup))
-
-    def test_recognized_user_units_shadow_only_matching_packaged_units(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            unit_root = root / ".config/systemd/user"
-            unit_root.mkdir(parents=True)
-            for name, markers in weyriva.LEGACY_UNIT_MARKERS.items():
-                (unit_root / name).write_text(f"[Service]\n{markers[0]}\n")
-            packaged = root / "usr/lib/systemd/user"
-            with mock.patch.object(weyriva, "PACKAGED_UNIT_ROOT", packaged):
-                self.assertEqual(weyriva.legacy_override_units(unit_root), ())
-                packaged.mkdir(parents=True)
-                (packaged / "weyriva-ipc.service").write_text("[Service]\nExecStart=/usr/bin/weyriva daemon\n")
-                self.assertEqual(
-                    weyriva.legacy_override_units(unit_root),
-                    ("weyriva-ipc.service",),
-                )
-
-    def test_recognized_legacy_and_current_units_are_backed_up_but_custom_units_are_preserved(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            unit_root = root / ".config/systemd/user"
-            backup_root = root / "backups"
-            unit_root.mkdir(parents=True)
-            legacy = unit_root / "weyriva-waybar.service"
-            custom = unit_root / "weyriva-mako.service"
-            legacy.write_text("[Service]\nExecStart=/usr/bin/waybar\n")
-            custom.write_text("[Service]\nExecStart=/opt/custom-mako\n")
-            current_units = {
-                "weyriva-ipc.service": "ExecStart=/usr/bin/weyriva daemon",
-                "weyriva-shell.service": "ExecStart=/usr/bin/weyriva shell run",
-                "weyriva-session-failsafe.service": (
-                    "ExecStart=/usr/bin/niri msg action quit --skip-confirmation"
-                ),
-            }
-            for name, marker in current_units.items():
-                (unit_root / name).write_text(f"[Service]\n{marker}\n")
-            moved = weyriva.back_up_legacy_user_units(unit_root, backup_root)
-            self.assertEqual(
-                moved,
-                (
-                    "weyriva-waybar.service",
-                    "weyriva-ipc.service",
-                    "weyriva-shell.service",
-                    "weyriva-session-failsafe.service",
-                ),
-            )
-            self.assertFalse(legacy.exists())
-            self.assertTrue((backup_root / legacy.name).is_file())
-            for name in current_units:
-                self.assertFalse((unit_root / name).exists())
-                self.assertTrue((backup_root / name).is_file())
-            self.assertTrue(custom.is_file())
-            self.assertEqual(weyriva.back_up_legacy_user_units(unit_root, backup_root), ())
-
-    def test_greetd_pam_requires_an_active_session_rule(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            pam = Path(temporary) / "greetd"
-            pam.write_text("# session required pam_systemd.so\nauth include system-login\n")
-            with self.assertRaisesRegex(RuntimeError, "no active session"):
-                weyriva.validate_greetd_pam(pam)
-            pam.write_text("auth include system-login\nsession include system-login\n")
-            weyriva.validate_greetd_pam(pam)
-
-    def test_greeter_state_directory_repairs_mode_and_refuses_unsafe_paths(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            state = root / "noctalia-greeter"
-            state.mkdir(mode=0o777)
-            weyriva.ensure_greeter_state_directory(
-                state,
-                os.getuid(),
-                os.getgid(),
-            )
-            self.assertEqual(state.stat().st_mode & 0o777, 0o750)
-
-            unsafe = root / "unsafe"
-            unsafe.write_text("not a directory\n")
-            with self.assertRaisesRegex(RuntimeError, "not a directory"):
-                weyriva.ensure_greeter_state_directory(
-                    unsafe,
-                    os.getuid(),
-                    os.getgid(),
-                )
-            link = root / "state-link"
-            link.symlink_to(state, target_is_directory=True)
-            with self.assertRaisesRegex(RuntimeError, "symlinked"):
-                weyriva.ensure_greeter_state_directory(
-                    link,
-                    os.getuid(),
-                    os.getgid(),
-                )
-
-    def test_startup_ensure_is_idempotent(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            packaged_config = root / "share/config"
-            packaged_units = root / "share/units"
-            greetd_template = root / "share/greetd/config.toml"
-            greetd_config = root / "etc/greetd/config.toml"
-            greeter_session = root / "bin/noctalia-greeter-session"
-            greetd_pam = root / "etc/pam.d/greetd"
-            greeter_state = root / "var/lib/noctalia-greeter"
-            session_entry = root / "share/wayland-sessions/weyriva.desktop"
-            user_home = root / "home/tester"
-
-            (packaged_config / "niri").mkdir(parents=True)
-            (packaged_config / "niri/config.kdl").write_text("layout {}\n")
-            packaged_units.mkdir(parents=True)
-            for name in weyriva.WEYRIVA_UNITS:
-                (packaged_units / name).write_text("[Service]\nExecStart=/usr/bin/true\n")
-            wants = packaged_units / "niri.service.wants"
-            wants.mkdir()
-            for name in weyriva.NIRI_WANTED_UNITS:
-                (wants / name).symlink_to(f"../{name}")
-            greetd_template.parent.mkdir(parents=True)
-            greetd_template.write_text(
-                "[terminal]\n"
-                "vt = 1\n\n"
-                "[default_session]\n"
-                'command = "/usr/bin/noctalia-greeter-session -- --session Weyriva"\n'
-                'user = "greeter"\n'
-            )
-            greetd_config.parent.mkdir(parents=True)
-            greetd_config.write_text("old greetd\n")
-            greetd_pam.parent.mkdir(parents=True)
-            greetd_pam.write_text("session include system-login\n")
-            greeter_state.parent.mkdir(parents=True)
-            display_manager = root / "etc/systemd/system/display-manager.service"
-            display_manager.parent.mkdir(parents=True)
-            display_manager.symlink_to("/usr/lib/systemd/system/greetd.service")
-            greeter_session.parent.mkdir(parents=True)
-            greeter_session.write_text("#!/bin/sh\n")
-            session_entry.parent.mkdir(parents=True)
-            session_entry.write_text(
-                "Name=Weyriva\nExec=/usr/bin/weyriva session start\n"
-            )
-            for relative in weyriva.REQUIRED_WALLPAPERS:
-                wallpaper = root / "share/wallpapers" / relative
-                wallpaper.parent.mkdir(parents=True, exist_ok=True)
-                wallpaper.write_text("image\n")
-            unit_root = user_home / ".config/systemd/user"
-            unit_root.mkdir(parents=True)
-            (unit_root / "weyriva-waybar.service").write_text(
-                "[Service]\nExecStart=/usr/bin/waybar\n"
-            )
-            current_unit_markers = {
-                "weyriva-ipc.service": "ExecStart=/usr/bin/weyriva daemon",
-                "weyriva-shell.service": "ExecStart=/usr/bin/weyriva shell run",
-                "weyriva-session-failsafe.service": (
-                    "ExecStart=/usr/bin/niri msg action quit --skip-confirmation"
-                ),
-            }
-            for name, marker in current_unit_markers.items():
-                (unit_root / name).write_text(f"[Service]\n{marker}\n")
-
-            account = mock.Mock(pw_dir=str(user_home), pw_uid=1000, pw_gid=1000)
-            greeter_account = mock.Mock(
-                pw_dir=str(greeter_state),
-                pw_uid=os.getuid(),
-                pw_gid=os.getgid(),
-            )
-            greeter_group = mock.Mock(gr_gid=os.getgid())
-
-            def lookup_account(name: str) -> mock.Mock:
-                return greeter_account if name == "greeter" else account
-
-            with (
-                mock.patch.object(weyriva, "PACKAGED_CONFIG_ROOT", packaged_config),
-                mock.patch.object(weyriva, "PACKAGED_UNIT_ROOT", packaged_units),
-                mock.patch.object(weyriva, "GREETD_TEMPLATE", greetd_template),
-                mock.patch.object(weyriva, "GREETD_CONFIG", greetd_config),
-                mock.patch.object(weyriva, "GREETD_PAM", greetd_pam),
-                mock.patch.object(weyriva, "GREETER_SESSION", greeter_session),
-                mock.patch.object(weyriva, "GREETER_STATE_DIR", greeter_state),
-                mock.patch.object(weyriva, "DISPLAY_MANAGER_LINK", display_manager),
-                mock.patch.object(weyriva, "PACKAGED_DATA_ROOT", root / "share"),
-                mock.patch.object(weyriva, "SESSION_ENTRY", session_entry),
-                mock.patch.object(weyriva.os, "geteuid", return_value=0),
-                mock.patch.object(weyriva.pwd, "getpwnam", side_effect=lookup_account),
-                mock.patch.object(weyriva.grp, "getgrnam", return_value=greeter_group),
-                mock.patch.object(weyriva, "_diagnostic_command", return_value="/usr/bin/runtime"),
-                mock.patch.object(weyriva, "_run_diagnostic_command", return_value=(0, "valid")),
-                mock.patch.object(weyriva, "_run_checked"),
-                mock.patch.object(weyriva, "_chown_tree"),
-                mock.patch.object(weyriva.time, "strftime", return_value="20260720-120000"),
-            ):
-                self.assertEqual(weyriva.ensure_startup_chain("tester"), 0)
-                self.assertEqual(weyriva.ensure_startup_chain("tester"), 0)
-
-            backup_root = user_home / ".local/state/weyriva/startup-backups/20260720-120000"
-            self.assertEqual(greetd_config.read_text(), greetd_template.read_text())
-            self.assertEqual((backup_root / "greetd/config.toml").read_text(), "old greetd\n")
-            self.assertTrue((backup_root / "systemd/user/weyriva-waybar.service").is_file())
-            self.assertFalse((unit_root / "weyriva-waybar.service").exists())
-            for name in current_unit_markers:
-                self.assertTrue((backup_root / "systemd/user" / name).is_file())
-                self.assertFalse((unit_root / name).exists())
-            self.assertEqual(greeter_state.stat().st_mode & 0o777, 0o750)
-
-    def test_startup_preflight_failure_causes_no_apply_mutation(self) -> None:
-        with (
-            mock.patch.object(
-                weyriva,
-                "preflight_startup_chain",
-                side_effect=RuntimeError("known conflict"),
-            ),
-            mock.patch.object(weyriva, "ensure_greeter_state_directory") as state_write,
-            mock.patch.object(weyriva, "reconcile_startup_file") as config_write,
-            mock.patch.object(weyriva, "back_up_legacy_user_units") as unit_write,
-            self.assertRaisesRegex(RuntimeError, "known conflict"),
+    def test_shell_owns_required_routes_and_ipc_contract(self) -> None:
+        shell = (ROOT / "shell/shell.qml").read_text()
+        panel = (ROOT / "shell/Weyriva/SurfacePanel.qml").read_text()
+        for route in (
+            "launcher",
+            "control-center",
+            "calendar",
+            "notifications",
+            "wallpaper",
+            "settings",
         ):
-            weyriva.ensure_startup_chain("tester")
-        state_write.assert_not_called()
-        config_write.assert_not_called()
-        unit_write.assert_not_called()
+            self.assertIn(f'"{route}"', shell + panel)
+        for function in (
+            "route",
+            "lock",
+            "clearNotifications",
+            "toggleDnd",
+            "setDnd",
+            "toggleBar",
+            "reload",
+        ):
+            self.assertIn(f"function {function}(", shell)
 
-    def test_aur_package_uses_private_default_config_paths(self) -> None:
-        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
-        self.assertNotIn('"$pkgdir/etc/xdg', package)
-        self.assertNotIn("backup=(", package)
-        self.assertIn("usr/share/weyriva/config/niri", package)
-        self.assertIn("usr/share/weyriva/config/noctalia", package)
-        self.assertIn("usr/share/weyriva/wallpapers/light/weyriva-cactus.png", package)
-        self.assertIn(
-            "usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png",
-            package,
-        )
-        self.assertIn("usr/lib/systemd/user/niri.service.wants", package)
-        for retired in ("waybar", "fuzzel", "mako", "swaylock"):
-            self.assertNotIn(f"usr/share/weyriva/config/{retired}", package)
+    def test_shell_interaction_and_lock_are_real(self) -> None:
+        shell = (ROOT / "shell/shell.qml").read_text()
+        state = (ROOT / "shell/Weyriva/ShellState.qml").read_text()
+        panel = (ROOT / "shell/Weyriva/SurfacePanel.qml").read_text()
+        self.assertIn("DesktopEntries.applications", panel)
+        self.assertIn("modelData.execute()", panel)
+        self.assertIn("NotificationServer", shell)
+        self.assertIn("modelData.dismiss()", panel)
+        self.assertIn("WlSessionLock", shell)
+        self.assertIn("PamContext", shell)
+        self.assertIn("signal requestLock()", state)
+        self.assertIn("function onRequestLock()", shell)
+        self.assertIn("ShellState.requestLock()", shell + panel)
+        self.assertIn("sessionLock.locked = true", shell)
+        self.assertIn("WlrKeyboardFocus.OnDemand", shell)
 
-    def test_noctalia_profile_environment_is_isolated_by_default(self) -> None:
+    def test_bar_and_calendar_clocks_share_the_live_clock(self) -> None:
+        shell = (ROOT / "shell/shell.qml").read_text()
+        panel = (ROOT / "shell/Weyriva/SurfacePanel.qml").read_text()
+        state = (ROOT / "shell/Weyriva/ShellState.qml").read_text()
+        self.assertIn("property date now: new Date()", state)
+        self.assertIn("interval: 1000", shell)
+        self.assertIn("onTriggered: ShellState.now = new Date()", shell)
+        self.assertIn('Qt.formatDateTime(ShellState.now, "ddd  MMM d  hh:mm")', shell)
+        self.assertIn("property date calendarMonth: new Date(", panel)
+        self.assertIn("ShellState.now.getFullYear()", panel)
+        self.assertIn("ShellState.now.getMonth()", panel)
+        self.assertIn('Qt.formatTime(ShellState.now, "hh:mm")', panel)
+
+    def test_every_shell_surface_uses_shared_fixed_theme(self) -> None:
+        theme = (ROOT / "shell/Weyriva/Theme.qml").read_text()
+        shell = (ROOT / "shell/shell.qml").read_text()
+        panel = (ROOT / "shell/Weyriva/SurfacePanel.qml").read_text()
+        button = (ROOT / "shell/Weyriva/ActionButton.qml").read_text()
+        for token in ("background", "surface", "foreground", "carrier"):
+            self.assertIn(f"property color {token}", theme)
+        self.assertIn("ShellState.dark", theme)
+        self.assertIn("ShellState.reducedMotion", theme)
+        self.assertIn("Theme.background", shell)
+        self.assertIn("Theme.chrome", shell)
+        self.assertIn("Theme.ivory", panel)
+        self.assertIn("Theme.ink", panel)
+        self.assertIn("control.selected", button)
+        self.assertIn("control.down", button)
+        self.assertIn("Behavior on scale", button)
+
+    def test_background_cannot_capture_input(self) -> None:
+        shell = (ROOT / "shell/shell.qml").read_text()
+        self.assertIn("WlrLayershell.layer: WlrLayer.Background", shell)
+        self.assertIn("WlrLayershell.keyboardFocus: WlrKeyboardFocus.None", shell)
+        self.assertIn("mask: Region { item: null }", shell)
+
+    def test_greeter_is_weyriva_owned_and_launches_fixed_session(self) -> None:
+        greeter = (ROOT / "greeter/shell.qml").read_text()
+        greetd = (ROOT / "config/greetd/config.toml").read_text()
+        self.assertIn("Quickshell.Services.Greetd", greeter)
+        self.assertIn('Greetd.launch(["/usr/bin/weyriva", "session", "start"])', greeter)
+        self.assertIn("/usr/bin/cage -s -- /usr/bin/quickshell --path", greetd)
+        self.assertIn("/usr/share/weyriva/greeter", greetd)
+
+    def test_quickshell_command_is_one_fixed_argument_array(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            home = Path(temporary)
-            environment = {
-                "HOME": str(home),
-                "PATH": "/usr/bin",
-                "NOCTALIA_CONFIG_HOME": "/standalone/config",
-                "NOCTALIA_STATE_HOME": "/standalone/state",
-                "NOCTALIA_DATA_HOME": "/standalone/data",
-            }
-            with mock.patch.object(Path, "home", return_value=home):
-                child = weyriva.noctalia_profile_environment(environment)
-            self.assertEqual(child["NOCTALIA_CONFIG_HOME"], str(home / ".config/weyriva"))
-            self.assertEqual(child["NOCTALIA_STATE_HOME"], str(home / ".local/state/weyriva"))
-            self.assertEqual(child["NOCTALIA_DATA_HOME"], str(home / ".local/share/weyriva"))
-            self.assertEqual(child["PATH"], "/usr/bin")
+            data_home = Path(temporary)
+            user_shell = data_home / "weyriva/shell"
+            user_shell.mkdir(parents=True)
+            (user_shell / "shell.qml").write_text("ShellRoot {}\n")
+            environment = {"XDG_DATA_HOME": str(data_home)}
+            self.assertEqual(
+                weyriva.quickshell_argv(["ipc", "call", "weyriva", "reload"], environment),
+                [
+                    "quickshell",
+                    "--path",
+                    str(user_shell),
+                    "ipc",
+                    "call",
+                    "weyriva",
+                    "reload",
+                ],
+            )
+        with mock.patch.object(weyriva, "PACKAGED_SHELL_ROOT", Path("/packaged/weyriva/shell")):
+            self.assertEqual(
+                weyriva.quickshell_argv(environment={"XDG_DATA_HOME": "/missing"}),
+                ["quickshell", "--path", "/packaged/weyriva/shell"],
+            )
 
-    def test_noctalia_profile_environment_honors_custom_xdg_bases(self) -> None:
-        root = Path("/tmp/weyriva-profile-test")
-        environment = {
-            "XDG_CONFIG_HOME": str(root / "config"),
-            "XDG_STATE_HOME": str(root / "state"),
-            "XDG_DATA_HOME": str(root / "data"),
-            "UNRELATED": "preserved",
-        }
-        child = weyriva.noctalia_profile_environment(environment)
+    def test_cli_called_ipc_functions_exactly_match_qml_handler(self) -> None:
+        python_source = (ROOT / "bin/weyriva").read_text()
+        qml_source = (ROOT / "shell/shell.qml").read_text()
+        called = set(re.findall(r'_shell_ipc\("([A-Za-z][A-Za-z0-9]*)"', python_source))
+        called.update(
+            re.findall(
+                r'quickshell_argv\(\s*\[\s*"ipc",\s*"call",\s*"weyriva",\s*"([A-Za-z][A-Za-z0-9]*)"',
+                python_source,
+            )
+        )
+        handler_source = qml_source.split("IpcHandler {", 1)[1]
+        handlers = set(
+            re.findall(r"function ([A-Za-z][A-Za-z0-9]*)\(", handler_source)
+        )
         self.assertEqual(
+            called,
             {
-                key: child[key]
-                for key in ("NOCTALIA_CONFIG_HOME", "NOCTALIA_STATE_HOME", "NOCTALIA_DATA_HOME")
-            },
-            {
-                "NOCTALIA_CONFIG_HOME": str(root / "config/weyriva"),
-                "NOCTALIA_STATE_HOME": str(root / "state/weyriva"),
-                "NOCTALIA_DATA_HOME": str(root / "data/weyriva"),
+                "route",
+                "lock",
+                "clearNotifications",
+                "toggleDnd",
+                "setDnd",
+                "toggleBar",
+                "reload",
             },
         )
-        self.assertEqual(child["UNRELATED"], "preserved")
+        self.assertEqual(handlers, called | {"status"})
 
-    def test_noctalia_delegation_execs_one_fixed_argument_array(self) -> None:
-        environment = {
-            "XDG_CONFIG_HOME": "/tmp/config",
-            "XDG_STATE_HOME": "/tmp/state",
-            "XDG_DATA_HOME": "/tmp/data",
-        }
-        with mock.patch.object(
-            weyriva.os, "execvpe", side_effect=OSError("exec boundary")
-        ) as execute:
-            with self.assertRaisesRegex(OSError, "exec boundary"):
-                weyriva.run_noctalia(["msg", "panel-toggle", "launcher;touch /tmp/bad"], environment)
-        program, arguments, child = execute.call_args.args
-        self.assertEqual(program, "noctalia")
-        self.assertEqual(arguments, ["noctalia", "msg", "panel-toggle", "launcher;touch /tmp/bad"])
-        self.assertEqual(child["NOCTALIA_CONFIG_HOME"], "/tmp/config/weyriva")
-
-    def test_first_run_seeds_only_missing_profile_and_wallpaper_files(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            packaged_config = root / "packaged/config/noctalia"
-            packaged_data = root / "packaged/data"
-            (packaged_config / "palettes").mkdir(parents=True)
-            (packaged_data / "wallpapers").mkdir(parents=True)
-            (packaged_config / "config.toml").write_text("packaged\n")
-            (packaged_config / "palettes/Weyriva.json").write_text("{}\n")
-            (packaged_data / "wallpapers/cactus.png").write_text("image\n")
-
-            environment = {
-                "HOME": str(root / "user/home"),
-                "XDG_CONFIG_HOME": str(root / "user/config"),
-                "XDG_DATA_HOME": str(root / "user/data"),
-            }
-            user_config = root / "user/config/weyriva/noctalia/config.toml"
-            user_config.parent.mkdir(parents=True)
-            user_config.write_text("user-owned\n")
-            with (
-                mock.patch.object(weyriva, "PACKAGED_CONFIG_ROOT", packaged_config.parent),
-                mock.patch.object(weyriva, "PACKAGED_DATA_ROOT", packaged_data),
-            ):
-                seeded = weyriva.seed_noctalia_profile(environment)
-                second_seed = weyriva.seed_noctalia_profile(environment)
-
-            self.assertEqual(user_config.read_text(), "user-owned\n")
-            self.assertEqual(
-                (root / "user/config/weyriva/noctalia/palettes/Weyriva.json").read_text(),
-                "{}\n",
-            )
-            self.assertEqual(
-                (root / "user/home/.local/share/weyriva/wallpapers/cactus.png").read_text(),
-                "image\n",
-            )
-            self.assertFalse((root / "user/data/weyriva/wallpapers/cactus.png").exists())
-            self.assertEqual(len(seeded), 2)
-            self.assertEqual(second_seed, ())
-
-    def test_first_run_seed_refuses_symlinked_destination_root_or_file(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            packaged_config = root / "packaged/config/noctalia"
-            packaged_data = root / "packaged/data"
-            packaged_config.mkdir(parents=True)
-            (packaged_data / "wallpapers").mkdir(parents=True)
-            (packaged_config / "config.toml").write_text("packaged\n")
-            (packaged_data / "wallpapers/cactus.png").write_text("image\n")
-            environment = {
-                "HOME": str(root / "user/home"),
-                "XDG_CONFIG_HOME": str(root / "user/config"),
-                "XDG_DATA_HOME": str(root / "user/data"),
-            }
-
-            external = root / "external"
-            external.mkdir()
-            profile_base = root / "user/config/weyriva"
-            profile_base.parent.mkdir(parents=True)
-            profile_base.symlink_to(external, target_is_directory=True)
-            with (
-                mock.patch.object(weyriva, "PACKAGED_CONFIG_ROOT", packaged_config.parent),
-                mock.patch.object(weyriva, "PACKAGED_DATA_ROOT", packaged_data),
-                self.assertRaisesRegex(RuntimeError, "symlink"),
-            ):
-                weyriva.seed_noctalia_profile(environment)
-            self.assertEqual(list(external.iterdir()), [])
-
-            profile_base.unlink()
-            profile = profile_base / "noctalia"
-            profile.mkdir(parents=True)
-            external_file = external / "config.toml"
-            external_file.write_text("external\n")
-            (profile / "config.toml").symlink_to(external_file)
-            with (
-                mock.patch.object(weyriva, "PACKAGED_CONFIG_ROOT", packaged_config.parent),
-                mock.patch.object(weyriva, "PACKAGED_DATA_ROOT", packaged_data),
-                self.assertRaisesRegex(RuntimeError, "symlink"),
-            ):
-                weyriva.seed_noctalia_profile(environment)
-            self.assertEqual(external_file.read_text(), "external\n")
-
-    def test_first_run_seed_uses_no_follow_file_creation_when_available(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "source"
-            destination = root / "destination"
-            source.mkdir()
-            (source / "file").write_text("content\n")
-            original_open = os.open
-            observed_flags: list[int] = []
-
-            def recording_open(path: object, flags: int, mode: int = 0o777) -> int:
-                observed_flags.append(flags)
-                return original_open(path, flags, mode)
-
-            with mock.patch.object(weyriva.os, "open", side_effect=recording_open):
-                weyriva._seed_missing_regular_files(source, destination)
-
-            self.assertTrue(observed_flags)
-            if hasattr(os, "O_NOFOLLOW"):
-                self.assertTrue(observed_flags[0] & os.O_NOFOLLOW)
-
-    def test_shell_run_seeds_before_starting_noctalia(self) -> None:
-        calls: list[str] = []
-
-        def exec_boundary(_arguments: list[str], _environment: object) -> None:
-            calls.append("run")
-            raise OSError("exec boundary")
-
+    def test_cli_route_and_lock_commands_call_native_ipc(self) -> None:
         with (
-            mock.patch.object(
-                weyriva, "seed_noctalia_profile", side_effect=lambda _environment: calls.append("seed")
-            ),
-            mock.patch.object(weyriva, "run_noctalia", side_effect=exec_boundary),
-            contextlib.redirect_stderr(io.StringIO()),
+            mock.patch.object(weyriva, "_shell_ipc", return_value={"output": "ok"}) as shell_ipc,
+            mock.patch.object(weyriva, "_print_json"),
         ):
-            self.assertEqual(weyriva.main(["shell", "run"]), 1)
-        self.assertEqual(calls, ["seed", "run"])
-
-    def test_shell_parser_bounds_run_reconcile_msg_and_config(self) -> None:
-        parser = weyriva.build_parser()
-        run = parser.parse_args(["shell", "run"])
-        self.assertEqual((run.command, run.shell_command), ("shell", "run"))
-        reconcile = parser.parse_args(["shell", "reconcile-lock"])
-        self.assertEqual((reconcile.command, reconcile.shell_command), ("shell", "reconcile-lock"))
-        for route in ("msg", "config"):
-            with self.subTest(route=route):
-                arguments = parser.parse_args(["shell", route, "validate"])
-                self.assertEqual((arguments.command, arguments.shell_command), ("shell", route))
-                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                    parser.parse_args(["shell", route])
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            parser.parse_args(["shell", "run", "extra"])
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            parser.parse_args(["shell", "arbitrary"])
-
-    def test_niri_config_prefers_environment_then_user_then_packaged(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            packaged = root / "share/weyriva/config"
-            packaged_config = packaged / "niri/config.kdl"
-            packaged_config.parent.mkdir(parents=True)
-            packaged_config.touch()
-            environment = {"XDG_CONFIG_HOME": str(root / "config")}
-            with mock.patch.object(weyriva, "PACKAGED_CONFIG_ROOT", packaged):
-                self.assertEqual(weyriva.niri_config_path(environment), packaged_config)
-                user_config = root / "config/niri/config.kdl"
-                user_config.parent.mkdir(parents=True)
-                user_config.touch()
-                self.assertEqual(weyriva.niri_config_path(environment), user_config)
-                selected = root / "custom.kdl"
-                environment["NIRI_CONFIG"] = str(selected)
-                self.assertEqual(weyriva.niri_config_path(environment), selected)
-
-    def test_diagnose_parser_supports_json_output(self) -> None:
-        arguments = weyriva.build_parser().parse_args(["diagnose", "--json"])
-        self.assertEqual(arguments.command, "diagnose")
-        self.assertTrue(arguments.json)
-
-    def test_diagnostic_summary_fails_only_on_failures(self) -> None:
-        checks = (
-            weyriva.DiagnosticCheck("niri", "ok", "/usr/bin/niri"),
-            weyriva.DiagnosticCheck("greetd", "warn", "not configured"),
-        )
-        summary = weyriva.diagnostic_summary(checks)
-        self.assertTrue(summary["ok"])
-        self.assertEqual(len(summary["checks"]), 2)
-
-    def test_niri_service_owns_weyriva_units_without_manual_spawn(self) -> None:
-        config = (ROOT / "config/niri/config.kdl").read_text()
-        self.assertNotIn("spawn-at-startup", config)
-        self.assertEqual(
-            weyriva.WEYRIVA_UNITS,
-            (
-                "weyriva-ipc.service",
-                "weyriva-shell.service",
-                "weyriva-session-failsafe.service",
-            ),
-        )
-        self.assertEqual(
-            weyriva.NIRI_WANTED_UNITS,
-            ("weyriva-ipc.service", "weyriva-shell.service"),
-        )
-        self.assertNotIn("weyriva-session.target", config)
-        self.assertFalse((ROOT / "systemd/weyriva-session.target").exists())
-        self.assertEqual(
-            {unit.name for unit in (ROOT / "systemd").glob("*.service")},
-            set(weyriva.WEYRIVA_UNITS),
-        )
-        for name in weyriva.WEYRIVA_UNITS:
-            unit = ROOT / "systemd" / name
-            content = unit.read_text()
-            self.assertIn("PartOf=graphical-session.target", content)
-            self.assertIn("After=graphical-session.target", content)
-            self.assertIn("Requisite=graphical-session.target", content)
-        self.assertIn(
-            "ExecStart=/usr/bin/weyriva shell run",
-            (ROOT / "systemd/weyriva-shell.service").read_text(),
-        )
-        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
-        for name in weyriva.NIRI_WANTED_UNITS:
-            self.assertIn(f'niri.service.wants/{name}"', package)
-        for retired in ("waybar", "mako", "wallpaper", "idle"):
-            self.assertNotIn(f"weyriva-{retired}.service", config)
-
-    def test_shell_restart_policy_and_failsafe_are_bounded(self) -> None:
-        shell = (ROOT / "systemd/weyriva-shell.service").read_text()
-        for setting in (
-            "Restart=on-failure",
-            "RestartSec=2",
-            "RestartMode=direct",
-            "StartLimitIntervalSec=30",
-            "StartLimitBurst=3",
-            "OnFailure=weyriva-session-failsafe.service",
-            "ExecStartPost=/usr/bin/weyriva shell reconcile-lock",
+            self.assertEqual(weyriva.main(["shell", "route", "calendar"]), 0)
+            shell_ipc.assert_called_once_with("route", "calendar")
+        with (
+            mock.patch.object(weyriva, "_shell_ipc", return_value={"output": "ok"}) as shell_ipc,
+            mock.patch.object(weyriva, "_print_json"),
         ):
-            self.assertIn(setting, shell)
-        failsafe = (ROOT / "systemd/weyriva-session-failsafe.service").read_text()
-        self.assertIn("Type=oneshot", failsafe)
-        self.assertIn(
-            "ExecStart=/usr/bin/niri msg action quit --skip-confirmation",
-            failsafe,
-        )
-        self.assertIn("Requisite=graphical-session.target", failsafe)
+            self.assertEqual(weyriva.main(["shell", "lock"]), 0)
+            shell_ipc.assert_called_once_with("lock")
 
-    def test_greeter_template_uses_noctalia_and_fixed_weyriva_session(self) -> None:
-        config = (ROOT / "config/greetd/config.toml").read_text()
-        self.assertIn("vt = 1", config)
-        self.assertIn(
-            'command = "/usr/bin/noctalia-greeter-session -- --session Weyriva"',
-            config,
-        )
-        self.assertIn('user = "greeter"', config)
-        self.assertNotIn("tuigreet", config)
-        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
-        self.assertIn("config/greetd/config.toml", package)
-
-    def test_niri_binds_all_noctalia_owned_shell_actions(self) -> None:
-        config = (ROOT / "config/niri/config.kdl").read_text()
-        bindings = (
-            'Mod+Space { spawn "weyriva" "shell" "msg" "panel-toggle" "launcher"; }',
-            'Mod+N { spawn "weyriva" "shell" "msg" "notification-dnd-toggle"; }',
-            'Mod+B { spawn "weyriva" "shell" "msg" "bar-toggle"; }',
-            'Mod+C { spawn "weyriva" "shell" "msg" "panel-toggle" "control-center"; }',
-            'Mod+V { spawn "weyriva" "shell" "msg" "panel-toggle" "clipboard"; }',
-            'Mod+W { spawn "weyriva" "shell" "msg" "panel-toggle" "wallpaper"; }',
-            'Mod+Shift+T { spawn "weyriva" "shell" "msg" "theme-mode-toggle"; }',
-            'Mod+Shift+E { spawn "weyriva" "shell" "msg" "panel-toggle" "session"; }',
-            'Mod+Shift+X { spawn "weyriva" "shell" "msg" "session" "lock"; }',
-            'Print { spawn "weyriva" "shell" "msg" "screenshot-region"; }',
-        )
-        for binding in bindings:
-            self.assertIn(binding, config)
-        for retired_command in (
-            '"component"',
-            '"desktop"',
-            '"wallpaper"',
-            '"idle"',
-            '"session" "lock"',
-        ):
-            self.assertNotIn(f'spawn "weyriva" {retired_command}', config)
-
-    def test_retired_surface_routes_are_absent_from_parser(self) -> None:
+    def test_parser_exposes_only_implemented_shell_and_plugin_routes(self) -> None:
         parser = weyriva.build_parser()
         for arguments in (
-            ["component", "waybar"],
-            ["desktop", "calendar"],
-            ["wallpaper"],
-            ["idle"],
-            ["session", "lock"],
+            ["shell", "run"],
+            ["shell", "lock"],
+            ["shell", "route", "launcher"],
+            ["plugin", "list"],
+            ["plugin", "reload"],
+            ["plugin", "validate", "demo.json"],
+        ):
+            with self.subTest(arguments=arguments):
+                parser.parse_args(arguments)
+        for arguments in (
+            ["shell", "msg"],
+            ["plugin", "install", "example"],
+            ["plugin", "source", "list"],
         ):
             with (
                 self.subTest(arguments=arguments),
@@ -933,44 +503,354 @@ class SessionLifecycleTests(unittest.TestCase):
             ):
                 parser.parse_args(arguments)
 
-    def test_system_session_uses_absolute_system_cli(self) -> None:
-        desktop = (ROOT / "user-share/wayland-sessions/weyriva.desktop").read_text()
-        self.assertIn("Name=Weyriva", desktop)
-        self.assertIn("Exec=/usr/bin/weyriva session start", desktop)
-        self.assertIn("DesktopNames=Weyriva;niri;", desktop)
 
-    def test_session_exec_inherits_path_with_running_cli_directory(self) -> None:
+class VisualInteractionContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.sources = qml_sources()
+        self.qml = "\n".join(self.sources.values())
+
+    def test_flat_anthropic_brand_grammar_has_no_gradient_or_legacy_runtime(self) -> None:
+        for color in ("#BCD1CA", "#FAF9F5", "#141413"):
+            self.assertIn(color, self.qml)
+        self.assertIn("bezierCurveTo", self.qml)
+        self.assertIn('lineCap = "round"', self.qml)
+        self.assertNotRegex(self.qml, r"\bGradient\s*\{")
+        self.assertNotIn("Noctalia", self.qml)
+        self.assertNotIn("noctalia", self.qml)
+
+    def test_every_enabled_action_button_has_an_action(self) -> None:
+        blocks = [
+            block
+            for source in self.sources.values()
+            for block in qml_blocks(source, "ActionButton")
+        ]
+        self.assertGreater(len(blocks), 12)
+        for block in blocks:
+            if re.search(r"\benabled\s*:\s*false\b", block):
+                continue
+            with self.subTest(label=re.search(r'\btext\s*:\s*"([^"]+)', block)):
+                self.assertRegex(
+                    block,
+                    r"\bonClicked\s*:|\bfunction launch\(\)",
+                    "an enabled ActionButton must map to an action",
+                )
+
+    def test_routes_use_distinct_centered_and_top_right_surface_families(self) -> None:
+        windows = [
+            block
+            for source in self.sources.values()
+            for block in qml_blocks(source, "PanelWindow")
+        ]
+        utility = next(block for block in windows if 'presentation: "utility"' in block)
+        centered = next(block for block in windows if 'presentation: "centered"' in block)
+        for route in ("control-center", "calendar", "notifications"):
+            self.assertIn(f'"{route}"', utility)
+        self.assertIn("anchors.top: parent.top", utility)
+        self.assertIn("anchors.right: parent.right", utility)
+        for route in ("launcher", "wallpaper", "settings"):
+            self.assertIn(f'"{route}"', centered)
+        self.assertIn("anchors.centerIn: parent", centered)
+
+    def test_launcher_filters_and_executes_real_desktop_entries(self) -> None:
+        panels = [
+            source
+            for source in self.sources.values()
+            if "DesktopEntries.applications.values" in source
+        ]
+        self.assertEqual(len(panels), 1)
+        panel = panels[0]
+
+        script_models = qml_blocks(panel, "ScriptModel")
+        filtered_model = next(
+            block for block in script_models if "id: filteredApplications" in block
+        )
+        self.assertIn('objectProp: "modelData"', filtered_model)
+        self.assertIn(
+            "DesktopEntries.applications.values.filter(application =>",
+            filtered_model,
+        )
+        self.assertIn("const query = search.text.trim().toLowerCase()", filtered_model)
+        self.assertIn('const name = application.name || ""', filtered_model)
+        self.assertIn('const genericName = application.genericName || ""', filtered_model)
+        self.assertIn("name.toLowerCase().includes(query)", filtered_model)
+        self.assertIn("genericName.toLowerCase().includes(query)", filtered_model)
+
+        launcher = next(
+            block
+            for block in qml_blocks(panel, "ListView")
+            if "id: launcherList" in block
+        )
+        self.assertIn("model: filteredApplications", launcher)
+        self.assertIn("currentIndex: count > 0 ? 0 : -1", launcher)
+        self.assertIn("onCountChanged: resetSelection()", launcher)
+        self.assertIn("keyNavigationEnabled: false", launcher)
+        self.assertIn("currentItem as LauncherButton", launcher)
+        self.assertIn("Keys.onReturnPressed: launchCurrent()", launcher)
+        self.assertIn("Math.min(currentIndex + 1, count - 1)", launcher)
+        self.assertIn("Math.max(currentIndex - 1, 0)", launcher)
+
+        self.assertNotIn("itemAtIndex", panel)
+        self.assertNotIn("visible: matches", panel)
+        self.assertNotIn("height: matches", panel)
+        self.assertIn("visible: launcherList.count === 0", panel)
+        self.assertIn('text: "No applications found"', panel)
+        self.assertIn("modelData.execute()", panel)
+
+        applications = (
+            {"name": "Code Editor", "genericName": "Text Editor"},
+            {"name": "Terminal", "genericName": "Command Line"},
+            {"name": "Notes", "genericName": "Plain Text Editor"},
+        )
+
+        def matches(application: dict[str, str], raw_query: str) -> bool:
+            query = raw_query.strip().lower()
+            return not query or any(
+                query in application[field].lower()
+                for field in ("name", "genericName")
+            )
+
+        filtered_rows = [
+            application
+            for application in applications
+            if matches(application, " editor ")
+        ]
+        self.assertEqual(
+            [application["name"] for application in filtered_rows],
+            ["Code Editor", "Notes"],
+        )
+        self.assertTrue(
+            all(matches(application, " editor ") for application in filtered_rows),
+            "every ListView model row must already satisfy the active query",
+        )
+
+    def test_calendar_has_real_month_navigation_and_date_grid(self) -> None:
+        self.assertIn("function moveMonth(offset)", self.qml)
+        self.assertIn("calendarMonth.getMonth() + offset", self.qml)
+        self.assertIn("model: 42", self.qml)
+        self.assertIn("property int dayNumber", self.qml)
+        self.assertIn("enabled: valid", self.qml)
+        self.assertRegex(
+            self.qml,
+            r"onClicked\s*:\s*root\.selectedDate\s*=\s*new Date\(",
+        )
+        self.assertIn("root.moveMonth(-1)", self.qml)
+        self.assertIn("root.moveMonth(1)", self.qml)
+
+    def test_notifications_and_wallpaper_have_observable_final_states(self) -> None:
+        self.assertIn("modelData.dismiss()", self.qml)
+        self.assertIn("function dismissAllNotifications()", self.qml)
+        self.assertIn("trackedNotifications.values.length === 0", self.qml)
+        self.assertIn("property bool selected: ShellState.wallpaper === imageSource", self.qml)
+        self.assertIn(
+            "onClicked: ShellState.useWallpaper(imageSource, darkAppearance)",
+            self.qml,
+        )
+        self.assertIn("wallpaper = path", self.qml)
+        self.assertIn("dark = darkAppearance", self.qml)
+
+    def test_security_input_and_reduced_motion_contracts_remain_real(self) -> None:
+        self.assertIn("mask: Region { item: null }", self.qml)
+        self.assertIn("WlrLayershell.keyboardFocus: WlrKeyboardFocus.None", self.qml)
+        self.assertIn("WlSessionLock", self.qml)
+        self.assertIn("PamContext", self.qml)
+        self.assertIn("Greetd.createSession(username.text)", self.qml)
+        self.assertIn("Greetd.respond(password.text)", self.qml)
+        self.assertIn("Greetd.launch(", self.qml)
+        self.assertIn("ShellState.reducedMotion ? 90", self.qml)
+        self.assertIn("enabled: !ShellState.reducedMotion", self.qml)
+        self.assertIn("active || ShellState.reducedMotion ? 1", self.qml)
+
+    def test_lock_password_is_cleared_for_every_pam_completion(self) -> None:
+        pam_handlers = [
+            block
+            for source in self.sources.values()
+            for block in qml_blocks(source, "PamContext")
+        ]
+        self.assertEqual(len(pam_handlers), 1)
+        completion = pam_handlers[0].split("onCompleted: result => {", 1)[1]
+        completion = completion.split("\n        }", 1)[0]
+        self.assertIn('pendingResponse = ""', completion)
+        self.assertIn('password.text = ""', completion)
+        self.assertLess(
+            completion.index('password.text = ""'),
+            completion.index("if (result === PamResult.Success)"),
+            "password clearing must happen on both failed and successful completion",
+        )
+
+    def test_qml_status_handler_is_typed_but_not_a_lock_recovery_probe(self) -> None:
+        handlers = [
+            block
+            for source in self.sources.values()
+            for block in qml_blocks(source, "IpcHandler")
+        ]
+        self.assertEqual(len(handlers), 1)
+        handler = handlers[0]
+        self.assertRegex(handler, r"\bfunction status\(\)\s*:\s*string\b")
+        status_body = re.search(
+            r"function status\(\)\s*:\s*string\s*\{(?P<body>.*?)\}",
+            handler,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(status_body)
+        assert status_body is not None
+        self.assertIn("return", status_body.group("body"))
+        python_source = (ROOT / "bin/weyriva").read_text()
+        reconcile_source = python_source.split("def reconcile_lock(", 1)[1].split(
+            "\ndef ", 1
+        )[0]
+        self.assertNotIn('"status"', reconcile_source)
+        self.assertIn("LockedHint", reconcile_source)
+        self.assertIn('return 0 if locked_hint == "no" else 1', reconcile_source)
+
+
+class ProtocolAndPluginTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.registry = weyriva.PluginRegistry({}, (), ())
+
+    def test_ping_round_trip_shape(self) -> None:
+        response = weyriva.process_request(
+            {"protocol": 1, "id": "test", "method": "weyriva.ping", "params": {}},
+            self.registry,
+        )
+        self.assertEqual(response["result"], {"pong": True, "protocol": 1})
+
+    def test_malformed_json_returns_structured_error(self) -> None:
+        response = json.loads(weyriva.process_line(b"{bad\n", self.registry))
+        self.assertEqual(response["error"]["code"], "parse_error")
+
+    def test_manifest_requires_own_namespace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            executable = Path(temporary) / "bin/weyriva"
-            executable.parent.mkdir()
-            executable.touch()
+            manifest = Path(temporary) / "plugin.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "id": "demo",
+                        "version": 1,
+                        "methods": {"other.echo": {"argv": ["true"]}},
+                    }
+                )
+            )
+            with self.assertRaisesRegex(weyriva.PluginError, "invalid or reserved"):
+                weyriva._parse_plugin(manifest)
+
+    def test_all_builtin_shell_actions_map_to_native_ipc(self) -> None:
+        registry = weyriva.PluginRegistry({}, (), ())
+        cases = (
+            ("weyriva.launcher.open", {}, ("route", "launcher")),
+            ("weyriva.notifications.dismiss_all", None, ("clearNotifications",)),
+            ("weyriva.notifications.dnd", {}, ("toggleDnd",)),
+            ("weyriva.notifications.dnd", {"enabled": True}, ("setDnd", "true")),
+            ("weyriva.notifications.dnd", {"enabled": False}, ("setDnd", "false")),
+            ("weyriva.panel.toggle", {}, ("toggleBar",)),
+            ("weyriva.panel.reload", None, ("reload",)),
+        )
+        for method, params, expected in cases:
             with (
-                mock.patch.object(weyriva, "_diagnostic_command", return_value="/usr/bin/niri"),
-                mock.patch.object(weyriva, "niri_config_path", return_value=Path("/tmp/niri/config.kdl")),
-                mock.patch.object(weyriva, "_run_diagnostic_command", return_value=(0, "valid")),
-                mock.patch.object(weyriva.os, "execvpe", side_effect=OSError("exec boundary")) as execute,
+                self.subTest(method=method, params=params),
+                mock.patch.object(weyriva, "_shell_ipc", return_value={}) as bridge,
             ):
-                with self.assertRaisesRegex(OSError, "exec boundary"):
-                    weyriva.start_session(str(executable), {"PATH": "/usr/bin", "TEST_VALUE": "kept"})
-            program, arguments, environment = execute.call_args.args
-            self.assertEqual(program, "niri-session")
-            self.assertEqual(arguments, ["niri-session"])
-            self.assertEqual(environment["PATH"].split(os.pathsep)[0], str(executable.parent.resolve()))
-            self.assertEqual(environment["TEST_VALUE"], "kept")
+                self.assertEqual(weyriva.dispatch(method, params, registry), {})
+                bridge.assert_called_once_with(*expected)
+
+    def test_builtin_shell_actions_reject_unexpected_parameters(self) -> None:
+        registry = weyriva.PluginRegistry({}, (), ())
+        invalid = (
+            ("weyriva.launcher.open", {"route": "settings"}),
+            ("weyriva.notifications.dismiss_all", {"all": True}),
+            ("weyriva.notifications.dnd", {"enabled": "yes"}),
+            ("weyriva.panel.toggle", {"visible": True}),
+            ("weyriva.panel.reload", {"force": True}),
+        )
+        for method, params in invalid:
+            with (
+                self.subTest(method=method),
+                self.assertRaisesRegex(weyriva.ProtocolError, "parameters"),
+            ):
+                weyriva.dispatch(method, params, registry)
+
+    def test_unsupported_protocol_and_unknown_method_are_structured(self) -> None:
+        unsupported = weyriva.process_request(
+            {"protocol": 999, "id": "p", "method": "weyriva.ping", "params": {}},
+            self.registry,
+        )
+        unknown = weyriva.process_request(
+            {"protocol": 1, "id": "m", "method": "weyriva.missing", "params": {}},
+            self.registry,
+        )
+        self.assertEqual(unsupported["error"]["code"], "unsupported_protocol")
+        self.assertEqual(unknown["error"]["code"], "method_not_found")
+
+    def test_ipc_framing_rejects_non_lines_and_oversized_requests(self) -> None:
+        non_line = json.loads(weyriva.process_line(b"{}", self.registry))
+        oversized = json.loads(
+            weyriva.process_line(b"x" * (weyriva.MAX_REQUEST_BYTES + 1) + b"\n", self.registry)
+        )
+        self.assertEqual(non_line["error"]["code"], "request_too_large")
+        self.assertEqual(oversized["error"]["code"], "request_too_large")
+
+    def test_daemon_lock_is_exclusive_and_private(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            lock_path = Path(temporary) / "daemon.lock"
+            lock = weyriva.acquire_daemon_lock(lock_path)
+            try:
+                self.assertEqual(lock_path.stat().st_mode & 0o777, 0o600)
+                with self.assertRaisesRegex(RuntimeError, "already running"):
+                    weyriva.acquire_daemon_lock(lock_path)
+            finally:
+                lock.close()
+
+    def test_stale_socket_is_removed_but_other_paths_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stale_path = root / "stale.sock"
+            stale = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                stale.bind(str(stale_path))
+            finally:
+                stale.close()
+            self.assertTrue(stale_path.is_socket())
+            weyriva.remove_stale_daemon_socket(stale_path)
+            self.assertFalse(stale_path.exists())
+
+            regular_path = root / "do-not-replace"
+            regular_path.write_text("owned data\n")
+            with self.assertRaisesRegex(RuntimeError, "non-socket"):
+                weyriva.remove_stale_daemon_socket(regular_path)
+            self.assertEqual(regular_path.read_text(), "owned data\n")
 
 
-class LockReconciliationTests(unittest.TestCase):
-    def _completed(self, returncode: int = 0, stdout: str = "") -> mock.Mock:
+class SessionLifecycleTests(unittest.TestCase):
+    @staticmethod
+    def _completed(returncode: int = 0, stdout: str = "") -> mock.Mock:
         return mock.Mock(returncode=returncode, stdout=stdout, stderr="")
 
-    def test_unlocked_session_returns_without_waiting_for_noctalia(self) -> None:
+    def test_greetd_pam_requires_active_session_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pam = Path(temporary) / "greetd"
+            pam.write_text("# session include system-login\nauth include system-login\n")
+            with self.assertRaisesRegex(RuntimeError, "no active session"):
+                weyriva.validate_greetd_pam(pam)
+            pam.write_text("auth include system-login\nsession include system-login\n")
+            weyriva.validate_greetd_pam(pam)
+
+    def test_startup_file_backup_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            destination = root / "destination"
+            backup = root / "backup"
+            source.write_text("new\n")
+            destination.write_text("old\n")
+            self.assertTrue(weyriva.reconcile_startup_file(source, destination, backup))
+            self.assertEqual(backup.read_text(), "old\n")
+            self.assertFalse(weyriva.reconcile_startup_file(source, destination, backup))
+
+    def test_unlocked_session_is_the_only_successful_reconciliation(self) -> None:
         runner = mock.Mock(return_value=self._completed(stdout="no\n"))
-        sleeper = mock.Mock()
         self.assertEqual(
             weyriva.reconcile_lock(
                 {"XDG_SESSION_ID": "c2"},
                 runner=runner,
-                sleeper=sleeper,
             ),
             0,
         )
@@ -981,441 +861,65 @@ class LockReconciliationTests(unittest.TestCase):
             timeout=5,
             check=False,
         )
-        sleeper.assert_not_called()
 
-    def test_missing_environment_session_uses_user_display_session(self) -> None:
-        runner = mock.Mock(
-            side_effect=(
-                self._completed(stdout="7\n"),
-                self._completed(stdout="no\n"),
-            )
-        )
-        with mock.patch.object(weyriva.os, "getuid", return_value=1000):
-            self.assertEqual(weyriva.reconcile_lock({}, runner=runner), 0)
-        self.assertEqual(
-            [call.args[0] for call in runner.call_args_list],
-            [
-                ["loginctl", "show-user", "1000", "-p", "Display", "--value"],
-                ["loginctl", "show-session", "7", "-p", "LockedHint", "--value"],
-            ],
-        )
-
-    def test_locked_session_polls_then_reacquires_isolated_noctalia_lock(self) -> None:
-        runner = mock.Mock(
-            side_effect=(
-                self._completed(stdout="yes\n"),
-                self._completed(returncode=1),
-                self._completed(),
-                self._completed(),
-            )
-        )
-        sleeper = mock.Mock()
-        environment = {
-            "XDG_SESSION_ID": "c3",
-            "XDG_CONFIG_HOME": "/tmp/config",
-            "XDG_STATE_HOME": "/tmp/state",
-            "XDG_DATA_HOME": "/tmp/data",
-        }
-        self.assertEqual(
-            weyriva.reconcile_lock(
-                environment,
-                attempts=3,
-                interval=0.01,
-                runner=runner,
-                sleeper=sleeper,
-            ),
-            0,
-        )
-        self.assertEqual(
-            runner.call_args_list[-1].args[0],
-            ["noctalia", "msg", "session", "lock"],
-        )
-        child = runner.call_args_list[-1].kwargs["env"]
-        self.assertEqual(child["NOCTALIA_CONFIG_HOME"], "/tmp/config/weyriva")
-        sleeper.assert_called_once_with(0.01)
-
-    def test_locked_session_failure_is_bounded_and_returns_nonzero(self) -> None:
-        runner = mock.Mock(
-            side_effect=(
-                self._completed(stdout="yes\n"),
-                self._completed(returncode=1),
-                self._completed(returncode=1),
-                self._completed(returncode=1),
-            )
-        )
-        sleeper = mock.Mock()
-        self.assertEqual(
-            weyriva.reconcile_lock(
-                {"XDG_SESSION_ID": "9"},
-                attempts=3,
-                interval=0.01,
-                runner=runner,
-                sleeper=sleeper,
-            ),
-            1,
-        )
-        self.assertEqual(sleeper.call_count, 2)
-        self.assertNotIn(
-            ["noctalia", "msg", "session", "lock"],
-            [call.args[0] for call in runner.call_args_list],
-        )
-
-    def test_unknown_locked_hint_fails_closed(self) -> None:
-        runner = mock.Mock(return_value=self._completed(stdout="unknown\n"))
-        self.assertEqual(
-            weyriva.reconcile_lock({"XDG_SESSION_ID": "c4"}, runner=runner),
-            1,
-        )
-
-    def test_session_resolution_failure_blank_or_invalid_id_fails_closed(self) -> None:
-        cases = (
-            ({}, (self._completed(returncode=1),)),
-            ({}, (self._completed(stdout="\n"),)),
-            ({"XDG_SESSION_ID": "c7"}, (self._completed(returncode=1),)),
-            ({"XDG_SESSION_ID": "bad id"}, ()),
-            ({"XDG_SESSION_ID": "c5\ncontrol"}, ()),
-            ({"XDG_SESSION_ID": " c6"}, ()),
-        )
-        for environment, results in cases:
-            with self.subTest(environment=environment):
-                runner = mock.Mock(side_effect=results)
+    def test_locked_unknown_and_failed_session_state_fail_closed(self) -> None:
+        for completed in (
+            self._completed(stdout="yes\n"),
+            self._completed(stdout="unknown\n"),
+            self._completed(returncode=1),
+        ):
+            with self.subTest(completed=completed):
+                runner = mock.Mock(return_value=completed)
                 self.assertEqual(
-                    weyriva.reconcile_lock(environment, runner=runner),
+                    weyriva.reconcile_lock(
+                        {"XDG_SESSION_ID": "c3"},
+                        runner=runner,
+                    ),
                     1,
                 )
-                for call in runner.call_args_list:
-                    self.assertNotIn("self", call.args[0])
+                self.assertEqual(runner.call_count, 1)
 
+    def test_shell_restart_policy_is_bounded(self) -> None:
+        shell_unit = (ROOT / "systemd/weyriva-shell.service").read_text()
+        failsafe_unit = (ROOT / "systemd/weyriva-session-failsafe.service").read_text()
+        self.assertIn("Restart=on-failure", shell_unit)
+        self.assertIn("StartLimitBurst=3", shell_unit)
+        self.assertIn("StartLimitIntervalSec=30", shell_unit)
+        self.assertIn("OnFailure=weyriva-session-failsafe.service", shell_unit)
+        self.assertIn("niri msg action quit --skip-confirmation", failsafe_unit)
+        self.assertNotIn("WatchdogSec", shell_unit)
 
-class ControlMethodTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.registry = weyriva.PluginRegistry({"test.echo": mock.Mock()}, (), ())
-
-    def _completed(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> mock.Mock:
-        return mock.Mock(returncode=returncode, stdout=stdout, stderr=stderr)
-
-    def test_methods_lists_builtins_and_plugins(self) -> None:
-        result = weyriva.dispatch("weyriva.methods", {}, self.registry)
-        self.assertEqual(result["builtin"], list(weyriva.BUILTIN_METHODS))
-        self.assertEqual(result["plugin"], ["test.echo"])
-        self.assertIn("weyriva.notifications.dnd", result["builtin"])
-
-    def test_dnd_routes_use_the_isolated_noctalia_ipc_bridge(self) -> None:
-        with mock.patch.object(
-            weyriva, "_noctalia_ipc", return_value={"command": "notification-dnd-toggle"}
-        ) as bridge:
-            result = weyriva.dispatch("weyriva.notifications.dnd", {}, self.registry)
-        self.assertEqual(result, {"command": "notification-dnd-toggle"})
-        self.assertEqual(bridge.call_args.args[0], ["notification-dnd-toggle"])
-        with mock.patch.object(weyriva, "_noctalia_ipc", return_value={}) as bridge:
-            weyriva.dispatch("weyriva.notifications.dnd", {"enabled": True}, self.registry)
-        self.assertEqual(bridge.call_args.args[0], ["notification-dnd-set", "on"])
-        with mock.patch.object(weyriva, "_noctalia_ipc", return_value={}) as bridge:
-            weyriva.dispatch("weyriva.notifications.dnd", {"enabled": False}, self.registry)
-        self.assertEqual(bridge.call_args.args[0], ["notification-dnd-set", "off"])
-
-    def test_dnd_rejects_non_boolean_parameters(self) -> None:
-        with self.assertRaises(weyriva.ProtocolError) as raised:
-            weyriva.dispatch("weyriva.notifications.dnd", {"enabled": "yes"}, self.registry)
-        self.assertEqual(raised.exception.code, "invalid_params")
-
-    def test_panel_aliases_use_the_noctalia_bar(self) -> None:
-        with mock.patch.object(weyriva, "_noctalia_ipc", return_value={}) as bridge:
-            weyriva.dispatch("weyriva.panel.toggle", {}, self.registry)
-        self.assertEqual(bridge.call_args.args[0], ["bar-toggle"])
-        with mock.patch.object(weyriva, "_noctalia_ipc", return_value={}) as bridge:
-            weyriva.dispatch("weyriva.panel.reload", {}, self.registry)
-        self.assertEqual(bridge.call_args.args[0], ["config-reload"])
-
-    def test_plugin_reload_swaps_registry_through_reloader(self) -> None:
-        fresh = weyriva.PluginRegistry({}, (), ("broken.json: cannot read JSON",))
-        result = weyriva.dispatch("weyriva.plugin.reload", {}, self.registry, reloader=lambda: fresh)
-        self.assertEqual(result, weyriva.plugin_summary(fresh))
-
-    def test_plugin_reload_requires_daemon_context(self) -> None:
-        with self.assertRaises(weyriva.ProtocolError) as raised:
-            weyriva.dispatch("weyriva.plugin.reload", {}, self.registry)
-        self.assertEqual(raised.exception.code, "unavailable")
-
-    def test_niri_queries_parse_json_and_report_missing_niri(self) -> None:
-        payload = '[{"name": "eDP-1", "logical": {"width": 2256}}]'
-        with mock.patch.object(weyriva.subprocess, "run", return_value=self._completed(stdout=payload)) as run:
-            result = weyriva.dispatch("weyriva.niri.outputs", {}, self.registry)
-        self.assertEqual(run.call_args.args[0], ["niri", "msg", "-j", "outputs"])
-        self.assertEqual(result[0]["name"], "eDP-1")
-        with mock.patch.object(weyriva.subprocess, "run", side_effect=FileNotFoundError("niri")):
-            with self.assertRaises(weyriva.ProtocolError) as raised:
-                weyriva.dispatch("weyriva.niri.windows", {}, self.registry)
-        self.assertEqual(raised.exception.code, "unavailable")
-
-    def test_validate_manifest_reports_methods_and_missing_executables(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            manifest = root / "demo.json"
-            manifest.write_text(
-                json.dumps(
-                    {
-                        "id": "demo",
-                        "version": 1,
-                        "methods": {
-                            "demo.here": {"argv": ["true"]},
-                            "demo.gone": {"argv": ["./missing.py"]},
-                        },
-                    }
-                )
-            )
-            summary = weyriva.validate_manifest(manifest)
-            self.assertEqual(summary["id"], "demo")
-            self.assertEqual(summary["methods"], ["demo.gone", "demo.here"])
-            self.assertEqual(summary["missing_executables"], [str(root / "missing.py")])
-            manifest.write_text("{not json")
-            with self.assertRaises(weyriva.PluginError):
-                weyriva.validate_manifest(manifest)
-            with self.assertRaisesRegex(weyriva.PluginError, "does not exist"):
-                weyriva.validate_manifest(root / "absent.json")
-
-    def test_plugin_parser_keeps_python_plugins_under_flat_legacy_names(self) -> None:
-        arguments = weyriva.build_parser().parse_args(["plugin", "legacy-list"])
-        self.assertEqual(arguments.plugin_command, "legacy-list")
-        arguments = weyriva.build_parser().parse_args(["plugin", "legacy-reload"])
-        self.assertEqual(arguments.plugin_command, "legacy-reload")
-        arguments = weyriva.build_parser().parse_args(["plugin", "legacy-validate", "demo.json"])
-        self.assertEqual(arguments.plugin_command, "legacy-validate")
-        self.assertEqual(arguments.path, "demo.json")
-        for old_route in (["plugin", "reload"], ["plugin", "validate", "demo.json"]):
-            with (
-                self.subTest(old_route=old_route),
-                contextlib.redirect_stderr(io.StringIO()),
-                self.assertRaises(SystemExit),
-            ):
-                weyriva.build_parser().parse_args(old_route)
-
-
-class NativePluginCliTests(unittest.TestCase):
-    def assert_delegates(self, source: list[str], expected: list[str]) -> None:
-        with mock.patch.object(
-            weyriva, "run_noctalia", side_effect=OSError("exec boundary")
-        ) as delegate:
-            with contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(weyriva.main(source), 1)
-        self.assertEqual(delegate.call_args.args[0], expected)
-
-    def test_native_plugin_lifecycle_maps_to_noctalia_without_translation(self) -> None:
-        plugin_id = "noctalia/screen_recorder"
-        cases = (
-            (["plugin", "list"], ["msg", "plugins", "list"]),
-            (["plugin", "install", plugin_id], ["msg", "plugins", "enable", plugin_id]),
-            (["plugin", "enable", plugin_id], ["msg", "plugins", "enable", plugin_id]),
-            (["plugin", "disable", plugin_id], ["msg", "plugins", "disable", plugin_id]),
-            (["plugin", "update", "official"], ["msg", "plugins", "update", "official"]),
-        )
-        for source, expected in cases:
-            with self.subTest(source=source):
-                self.assert_delegates(source, expected)
-
-    def test_native_plugin_parser_rejects_non_upstream_lifecycle_shapes(self) -> None:
-        parser = weyriva.build_parser()
-        for arguments in (
-            ["plugin", "remove", "noctalia/screen_recorder"],
-            ["plugin", "update"],
-            ["plugin", "update", "official", "community"],
-        ):
-            with (
-                self.subTest(arguments=arguments),
-                contextlib.redirect_stderr(io.StringIO()),
-                self.assertRaises(SystemExit),
-            ):
-                parser.parse_args(arguments)
-
-    def test_native_plugin_sources_map_to_noctalia(self) -> None:
-        cases = (
-            (["plugin", "source", "list"], ["msg", "plugins", "source", "list"]),
-            (
-                ["plugin", "source", "add", "mine", "git", "https://example.test/plugins"],
-                [
-                    "msg",
-                    "plugins",
-                    "source",
-                    "add",
-                    "mine",
-                    "git",
-                    "https://example.test/plugins",
-                ],
-            ),
-            (
-                ["plugin", "source", "add", "dev", "path", "/tmp/plugins;literal"],
-                ["msg", "plugins", "source", "add", "dev", "path", "/tmp/plugins;literal"],
-            ),
-            (["plugin", "source", "remove", "mine"], ["msg", "plugins", "source", "remove", "mine"]),
-        )
-        for source, expected in cases:
-            with self.subTest(source=source):
-                self.assert_delegates(source, expected)
-
-    def test_native_plugin_lint_uses_offline_noctalia_tool(self) -> None:
-        self.assert_delegates(["plugin", "lint"], ["plugins", "lint"])
-        self.assert_delegates(
-            ["plugin", "lint", "/tmp/one", "/tmp/two;literal"],
-            ["plugins", "lint", "/tmp/one", "/tmp/two;literal"],
-        )
-
-
-class NoctaliaProfileTests(unittest.TestCase):
-    @staticmethod
-    def _contrast(left: str, right: str) -> float:
-        def luminance(color: str) -> float:
-            channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
-            linear = [
-                channel / 12.92
-                if channel <= 0.04045
-                else ((channel + 0.055) / 1.055) ** 2.4
-                for channel in channels
-            ]
-            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
-
-        first, second = sorted((luminance(left), luminance(right)), reverse=True)
-        return (first + 0.05) / (second + 0.05)
-
-    def test_profile_declares_native_sources_and_weyriva_palette(self) -> None:
-        config_path = ROOT / "config/noctalia/config.toml"
-        with config_path.open("rb") as stream:
-            document = tomllib.load(stream)
-        self.assertIsInstance(document, dict)
-        content = config_path.read_text()
-        self.assertIn("official-plugins", content)
-        self.assertIn("community-plugins", content)
-        self.assertIn("Weyriva", content)
-        self.assertTrue(document["dock"]["enabled"])
-        self.assertTrue(document["osd"]["enabled"])
-        self.assertTrue(document["shell"]["clipboard_enabled"])
-        self.assertTrue(document["shell"]["polkit_agent"])
-        self.assertTrue(document["shell"]["animation"]["enabled"])
-        self.assertEqual(document["shell"]["animation"]["speed"], 1.1)
-        self.assertEqual(document["shell"]["panel"]["transparency_mode"], "soft")
-        self.assertTrue(document["shell"]["greeter_sync"]["auto_sync"])
-        self.assertEqual(document["theme"]["mode"], "auto")
-        self.assertEqual(document["theme"]["source"], "wallpaper")
-        self.assertEqual(document["theme"]["wallpaper_scheme"], "soft")
-        self.assertTrue(document["location"]["custom_schedule"])
-        self.assertEqual(document["location"]["sunrise"], "07:00")
-        self.assertEqual(document["location"]["sunset"], "19:00")
-        self.assertEqual(
-            document["wallpaper"]["directory"],
-            "~/.local/share/weyriva/wallpapers",
-        )
-        self.assertEqual(document["wallpaper"]["transition"], ["fade"])
-        self.assertEqual(document["wallpaper"]["transition_duration"], 400)
-        self.assertTrue(document["wallpaper"]["transition_on_startup"])
-        self.assertEqual(
-            document["wallpaper"]["directory_light"],
-            "~/.local/share/weyriva/wallpapers/light",
-        )
-        self.assertEqual(
-            document["wallpaper"]["directory_dark"],
-            "~/.local/share/weyriva/wallpapers/dark",
-        )
-        self.assertEqual(
-            document["wallpaper"]["default"]["path"],
-            "~/.local/share/weyriva/wallpapers/light/weyriva-cactus.png",
-        )
-        self.assertIn("theme_mode", document["bar"]["default"]["end"])
-        self.assertIn("settings", document["bar"]["default"]["end"])
-
-        palette = json.loads((ROOT / "config/noctalia/palettes/Weyriva.json").read_text())
-        serialized = json.dumps(palette)
-        for color in ("141413", "FAF9F5", "BCD1CA"):
-            self.assertIn(color, serialized)
-        roles = {
-            "mPrimary",
-            "mOnPrimary",
-            "mSecondary",
-            "mOnSecondary",
-            "mTertiary",
-            "mOnTertiary",
-            "mError",
-            "mOnError",
-            "mSurface",
-            "mOnSurface",
-            "mSurfaceVariant",
-            "mOnSurfaceVariant",
-            "mOutline",
-            "mShadow",
-            "mHover",
-            "mOnHover",
+    def test_niri_binds_every_shipped_desktop_action_exactly(self) -> None:
+        config = (ROOT / "config/niri/config.kdl").read_text()
+        expected = {
+            "Mod+Space": 'spawn "weyriva" "shell" "route" "launcher"',
+            "Mod+N": 'spawn "weyriva" "shell" "route" "notifications"',
+            "Mod+C": 'spawn "weyriva" "shell" "route" "control-center"',
+            "Mod+W": 'spawn "weyriva" "shell" "route" "wallpaper"',
+            "Mod+Shift+T": 'spawn "weyriva" "shell" "route" "settings"',
+            "Mod+Shift+X": 'spawn "weyriva" "shell" "lock"',
+            "Mod+Return": 'spawn "foot"',
+            "Mod+Q": "close-window",
+            "Mod+H": "focus-column-left",
+            "Mod+L": "focus-column-right",
+            "Mod+J": "focus-window-down",
+            "Mod+K": "focus-window-up",
+            "Mod+Shift+H": "move-column-left",
+            "Mod+Shift+L": "move-column-right",
+            "Mod+1": "focus-workspace 1",
+            "Mod+2": "focus-workspace 2",
+            "Mod+3": "focus-workspace 3",
+            "Mod+Shift+1": "move-column-to-workspace 1",
+            "Mod+Shift+2": "move-column-to-workspace 2",
+            "Mod+Shift+3": "move-column-to-workspace 3",
+            "Print": "screenshot",
         }
-        ansi = {"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"}
-        terminal_direct = {
-            "foreground",
-            "background",
-            "cursor",
-            "cursorText",
-            "selectionFg",
-            "selectionBg",
-        }
-        for mode in ("dark", "light"):
-            with self.subTest(mode=mode):
-                theme = palette[mode]
-                self.assertTrue(roles.issubset(theme))
-                self.assertEqual(set(theme["terminal"]["normal"]), ansi)
-                self.assertEqual(set(theme["terminal"]["bright"]), ansi)
-                self.assertTrue(terminal_direct.issubset(theme["terminal"]))
-                for foreground, background in (
-                    ("mOnPrimary", "mPrimary"),
-                    ("mOnSecondary", "mSecondary"),
-                    ("mOnTertiary", "mTertiary"),
-                    ("mOnError", "mError"),
-                    ("mOnSurface", "mSurface"),
-                    ("mOnSurfaceVariant", "mSurfaceVariant"),
-                    ("mOnHover", "mHover"),
-                ):
-                    self.assertGreaterEqual(
-                        self._contrast(theme[foreground], theme[background]),
-                        4.5,
-                    )
-                terminal = theme["terminal"]
-                self.assertGreaterEqual(
-                    self._contrast(terminal["foreground"], terminal["background"]),
-                    4.5,
-                )
-
-    def test_light_and_dark_wallpaper_assets_are_seeded_and_packaged(self) -> None:
-        self.assertTrue((ROOT / "assets/wallpapers/weyriva-cactus.png").is_file())
-        self.assertTrue((ROOT / "assets/wallpapers/weyriva-cactus-dark.png").is_file())
-        installer = (ROOT / "scripts/install.sh").read_text()
-        system_installer = (ROOT / "scripts/install-system.sh").read_text()
-        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
-        for relative in (
-            "wallpapers/light/weyriva-cactus.png",
-            "wallpapers/dark/weyriva-cactus-dark.png",
-        ):
-            self.assertIn(relative, installer)
-            self.assertIn(relative, system_installer)
-            self.assertIn(relative, package)
-
-    def test_v4_parity_rows_remain_explicitly_incomplete(self) -> None:
-        rows = [
-            line.lower()
-            for line in (ROOT / "docs/NOCTALIA_PARITY.md").read_text().splitlines()
-            if line.startswith("|") and "v4" in line.lower()
-        ]
-        self.assertTrue(rows)
-        for row in rows:
-            self.assertIn("pending", row)
-            self.assertNotIn("complete", row)
-
-    def test_roadmap_tracks_current_stack_and_keeps_acceptance_gates_pending(self) -> None:
-        roadmap = (ROOT / "docs/ROADMAP.md").read_text()
-        for current in (
-            "Noctalia v5",
-            "Noctalia Greeter",
-            "systemd",
-            "AUR",
-            "user-only installer",
-        ):
-            self.assertIn(current, roadmap)
-        for pending in ("v4 compatibility", "catalog matrix", "XRY acceptance"):
-            self.assertIn(pending, roadmap)
-        self.assertNotIn("Waybar, fuzzel, mako", roadmap)
+        binds = config.split("binds {", 1)[1].split("\n}", 1)[0]
+        actual = dict(
+            re.findall(r"^\s*([^\s{]+)\s*\{\s*([^;\n]+);\s*\}$", binds, re.MULTILINE)
+        )
+        self.assertEqual(actual, expected)
+        self.assertNotIn("spawn-at-startup", config)
 
 
 if __name__ == "__main__":

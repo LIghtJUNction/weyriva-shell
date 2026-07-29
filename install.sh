@@ -22,7 +22,8 @@ for required_path in \
     "$SCRIPT_DIR/scripts/install-system.sh" \
     "$SCRIPT_DIR/bin/weyriva" \
     "$SCRIPT_DIR/config/niri/config.kdl" \
-    "$SCRIPT_DIR/config/noctalia/config.toml" \
+    "$SCRIPT_DIR/shell/shell.qml" \
+    "$SCRIPT_DIR/greeter/shell.qml" \
     "$SCRIPT_DIR/config/greetd/config.toml"; do
     [[ -f $required_path && ! -L $required_path ]] ||
         fail "incomplete or unsafe Weyriva checkout: $required_path"
@@ -63,75 +64,53 @@ run_as_root() {
     sudo "$@"
 }
 
-run_as_invoking_user() {
-    if [[ ${EUID} -ne 0 ]]; then
-        "$@"
-        return
-    fi
-    if command -v sudo >/dev/null 2>&1; then
-        sudo -u "$desktop_user" -- "$@"
-    elif command -v runuser >/dev/null 2>&1; then
-        runuser -u "$desktop_user" -- "$@"
-    else
-        fail 'sudo or runuser is required to execute the AUR helper as the invoking ordinary user.'
-    fi
-}
-
 case ${managers[0]} in
     pacman)
-        aur_packages=()
-        repository_packages=(niri greetd foot noto-fonts)
-        aur_helper=
+        repository_packages=(niri greetd quickshell cage foot noto-fonts)
         for package_name in "${repository_packages[@]}"; do
             pacman -Si "$package_name" >/dev/null 2>&1 ||
                 fail "repository package is unavailable: $package_name"
         done
-        for specification in "noctalia:noctalia" "noctalia-greeter:noctalia-greeter-session"; do
-            package_name=${specification%%:*}
-            command_name=${specification#*:}
-            if command -v "$command_name" >/dev/null 2>&1; then
-                continue
-            fi
-            if pacman -Si "$package_name" >/dev/null 2>&1; then
-                repository_packages+=("$package_name")
-            else
-                aur_packages+=("$package_name")
+        pacman -Sp --print-format '%n' "${repository_packages[@]}" >/dev/null 2>&1 ||
+            fail 'the Arch package transaction cannot be resolved.'
+        nonconflicting_packages=(niri greetd cage foot noto-fonts)
+        run_as_root pacman -S --noconfirm --needed "${nonconflicting_packages[@]}"
+
+        blocking_packages=()
+        for package_name in cachyos-niri-noctalia noctalia-shell; do
+            if pacman -Qq "$package_name" >/dev/null 2>&1; then
+                blocking_packages+=("$package_name")
             fi
         done
-        if [[ ${#aur_packages[@]} -gt 0 ]]; then
-            for candidate in paru yay; do
-                if command -v "$candidate" >/dev/null 2>&1; then
-                    aur_helper=$(command -v "$candidate")
-                    break
-                fi
-            done
-            [[ -n $aur_helper ]] ||
-                fail 'an installed AUR helper (paru or yay) is required for the resolved package plan.'
-            for package_name in "${aur_packages[@]}"; do
-                run_as_invoking_user "$aur_helper" -Si "$package_name" >/dev/null 2>&1 ||
-                    fail "AUR package is unavailable: $package_name"
-            done
+        if [[ ${#blocking_packages[@]} -gt 0 ]]; then
+            run_as_root "$SCRIPT_DIR/scripts/install-system.sh" \
+                --preflight --user "$desktop_user"
+            pacman -R --print --print-format '%n' \
+                "${blocking_packages[@]}" >/dev/null 2>&1 ||
+                fail 'the legacy shell package removal cannot be resolved.'
+            run_as_root pacman -R --noconfirm "${blocking_packages[@]}"
         fi
-        run_as_root pacman -S --noconfirm --needed "${repository_packages[@]}"
-        if [[ ${#aur_packages[@]} -gt 0 ]]; then
-            run_as_invoking_user "$aur_helper" -S --noconfirm --needed "${aur_packages[@]}"
-        fi
+        run_as_root pacman -S --noconfirm --needed quickshell
+        pacman -Qq | grep -Fx quickshell >/dev/null 2>&1 ||
+            fail 'generic quickshell package was not installed.'
         ;;
     dnf)
-        run_as_root dnf install -y niri greetd noctalia noctalia-greeter foot google-noto-sans-fonts
+        run_as_root dnf install -y niri greetd quickshell cage foot google-noto-sans-fonts
         ;;
     apt-get)
-        run_as_root apt-get install -y niri greetd noctalia noctalia-greeter foot fonts-noto-core
+        run_as_root apt-get install -y niri greetd quickshell cage foot fonts-noto-core
         ;;
     zypper)
-        run_as_root zypper --non-interactive install niri greetd noctalia noctalia-greeter foot google-noto-sans-fonts
+        run_as_root zypper --non-interactive install niri greetd quickshell cage foot google-noto-sans-fonts
         ;;
 esac
 
-for command_name in niri niri-session noctalia noctalia-greeter-session foot; do
+for command_name in niri niri-session quickshell cage foot; do
     command -v "$command_name" >/dev/null 2>&1 || fail "required command is unavailable after package installation: $command_name"
 done
 
+run_as_root "$SCRIPT_DIR/scripts/install-system.sh" \
+    --preflight --user "$desktop_user"
 run_as_root "$SCRIPT_DIR/scripts/install-system.sh" --user "$desktop_user"
 
 printf '%s\n' 'Weyriva is installed. Reboot or log out, then choose Weyriva.'

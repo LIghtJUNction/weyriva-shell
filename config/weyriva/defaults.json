@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "appearance": {
+    "background": "#BCD1CA",
+    "surface": "#FAF9F5",
+    "ink": "#141413",
+    "accent": "#D97757"
+  },
+  "plugins": {
+    "v4": "planned",
+    "v5": "planned"
+  }
+}

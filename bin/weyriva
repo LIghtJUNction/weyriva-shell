@@ -34,15 +34,21 @@ RESERVED_PREFIX: Final = "weyriva."
 MAX_HANDLERS: Final = 16
 READ_TIMEOUT: Final = 3.0
 PLUGIN_ID_PATTERN: Final = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
-RUNTIME_COMMANDS: Final = ("niri", "niri-session", "noctalia", "noctalia-greeter-session", "foot")
+RUNTIME_COMMANDS: Final = ("niri", "niri-session", "quickshell", "cage", "foot")
 PACKAGED_CONFIG_ROOT: Final = Path("/usr/share/weyriva/config")
 PACKAGED_DATA_ROOT: Final = Path("/usr/share/weyriva")
+PACKAGED_SHELL_ROOT: Final = Path("/usr/share/weyriva/shell")
+PACKAGED_GREETER_ROOT: Final = Path("/usr/share/weyriva/greeter")
 PACKAGED_UNIT_ROOT: Final = Path("/usr/lib/systemd/user")
 GREETD_TEMPLATE: Final = Path("/usr/share/weyriva/greetd/config.toml")
 GREETD_CONFIG: Final = Path("/etc/greetd/config.toml")
 GREETD_PAM: Final = Path("/etc/pam.d/greetd")
-GREETER_SESSION: Final = Path("/usr/bin/noctalia-greeter-session")
-GREETER_STATE_DIR: Final = Path("/var/lib/noctalia-greeter")
+GREETER_ENV: Final = Path("/usr/bin/env")
+GREETER_SESSION: Final = Path("/usr/bin/cage")
+GREETER_STATE_DIR: Final = Path("/var/lib/weyriva-greeter")
+GREETER_PRIVATE_DIRS: Final = tuple(
+    GREETER_STATE_DIR / name for name in ("state", "cache", "config")
+)
 GREETER_USER: Final = "greeter"
 DISPLAY_MANAGER_LINK: Final = Path("/etc/systemd/system/display-manager.service")
 SESSION_ENTRY: Final = Path("/usr/share/wayland-sessions/weyriva.desktop")
@@ -56,8 +62,6 @@ REQUIRED_WALLPAPERS: Final = (
     "light/weyriva-cactus.png",
     "dark/weyriva-cactus-dark.png",
 )
-LOCK_RECONCILE_ATTEMPTS: Final = 20
-LOCK_RECONCILE_INTERVAL: Final = 0.25
 SESSION_ID_PATTERN: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 LEGACY_UNIT_MARKERS: Final = {
     "weyriva-waybar.service": ("ExecStart=/usr/bin/waybar",),
@@ -163,137 +167,54 @@ def _run_diagnostic_command(command: list[str], timeout: float = 5.0) -> tuple[i
 
 
 def _config_home(environment: Mapping[str, str]) -> Path:
-    return Path(environment.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    home = Path(environment.get("HOME", Path.home()))
+    return Path(environment.get("XDG_CONFIG_HOME", home / ".config"))
 
 
-def _state_home(environment: Mapping[str, str]) -> Path:
-    return Path(environment.get("XDG_STATE_HOME", Path.home() / ".local/state"))
+def shell_root(environment: Mapping[str, str]) -> Path:
+    home = Path(environment.get("HOME", Path.home()))
+    data_home = Path(environment.get("XDG_DATA_HOME", home / ".local/share"))
+    user_root = data_home / "weyriva/shell"
+    return user_root if (user_root / "shell.qml").is_file() else PACKAGED_SHELL_ROOT
 
 
-def _data_home(environment: Mapping[str, str]) -> Path:
-    return Path(environment.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+def quickshell_argv(
+    arguments: list[str] | None = None,
+    environment: Mapping[str, str] = os.environ,
+) -> list[str]:
+    return ["quickshell", "--path", str(shell_root(environment)), *(arguments or [])]
 
 
-def noctalia_profile_environment(environment: Mapping[str, str]) -> dict[str, str]:
-    """Return a child environment isolated from any standalone Noctalia profile."""
-    child_environment = dict(environment)
-    child_environment["NOCTALIA_CONFIG_HOME"] = str(_config_home(environment) / "weyriva")
-    child_environment["NOCTALIA_STATE_HOME"] = str(_state_home(environment) / "weyriva")
-    child_environment["NOCTALIA_DATA_HOME"] = str(_data_home(environment) / "weyriva")
-    return child_environment
+def run_shell(environment: Mapping[str, str]) -> NoReturn:
+    command = quickshell_argv(environment=environment)
+    os.execvpe(command[0], command, dict(environment))
+    raise RuntimeError("quickshell exec unexpectedly returned")
 
 
-def noctalia_argv(arguments: list[str]) -> list[str]:
-    return ["noctalia", *arguments]
-
-
-def _safe_destination_directory(path: Path) -> Path:
-    expanded = path.expanduser()
-    if not expanded.is_absolute():
-        raise RuntimeError(f"seed destination must be absolute: {expanded}")
-    destination = Path(os.path.abspath(expanded))
-    current = Path(destination.anchor)
-    for component in destination.parts[1:]:
-        current /= component
-        if current.is_symlink():
-            raise RuntimeError(f"refusing to seed through symlink: {current}")
-        if current.exists() and not current.is_dir():
-            raise RuntimeError(f"seed destination component is not a directory: {current}")
-    destination.mkdir(mode=0o755, parents=True, exist_ok=True)
-    if destination.is_symlink() or not destination.is_dir():
-        raise RuntimeError(f"unsafe seed destination directory: {destination}")
-    return destination
-
-
-def _seed_missing_regular_files(source_root: Path, destination_root: Path) -> tuple[Path, ...]:
-    destination = _safe_destination_directory(destination_root)
-    if source_root.is_symlink() or not source_root.is_dir():
-        raise RuntimeError(f"packaged seed directory is unavailable: {source_root}")
-
-    seeded: list[Path] = []
-    for source in sorted(source_root.rglob("*")):
-        if source.is_symlink():
-            raise RuntimeError(f"packaged seed contains a symlink: {source}")
-        if not source.is_file():
-            continue
-        relative = source.relative_to(source_root)
-        target = destination / relative
-        _safe_destination_directory(target.parent)
-        if target.is_symlink():
-            raise RuntimeError(f"refusing to seed a symlinked file: {target}")
-        if target.exists():
-            if not target.is_file():
-                raise RuntimeError(f"seed destination is not a regular file: {target}")
-            continue
-
-        source_mode = stat.S_IMODE(source.stat().st_mode)
-        descriptor: int | None = None
-        try:
-            open_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-            open_flags |= getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(target, open_flags, source_mode)
-            with source.open("rb") as source_stream, os.fdopen(descriptor, "wb") as target_stream:
-                descriptor = None
-                shutil.copyfileobj(source_stream, target_stream)
-            seeded.append(target)
-        except FileExistsError as error:
-            if target.is_symlink():
-                raise RuntimeError(f"refusing to seed a symlinked file: {target}") from error
-            if not target.is_file():
-                raise RuntimeError(f"seed destination is not a regular file: {target}") from error
-        except Exception:
-            if descriptor is not None:
-                os.close(descriptor)
-            if target.is_file() and not target.is_symlink():
-                target.unlink()
-            raise
-    return tuple(seeded)
-
-
-def seed_noctalia_profile(environment: Mapping[str, str]) -> tuple[Path, ...]:
-    profile_environment = noctalia_profile_environment(environment)
-    config_destination = Path(profile_environment["NOCTALIA_CONFIG_HOME"]) / "noctalia"
-    home = Path(environment.get("HOME", Path.home())).expanduser()
-    wallpaper_destination = home / ".local/share/weyriva/wallpapers"
-    pairs = (
-        (PACKAGED_CONFIG_ROOT / "noctalia", config_destination),
-        (PACKAGED_DATA_ROOT / "wallpapers", wallpaper_destination),
+def _shell_ipc(
+    function: str,
+    *arguments: str,
+    environment: Mapping[str, str] = os.environ,
+) -> dict[str, JsonValue]:
+    command = quickshell_argv(
+        ["ipc", "call", "weyriva", function, *arguments],
+        environment=environment,
     )
-
-    seeded: list[Path] = []
-    for source, destination in pairs:
-        if source.is_dir() and not source.is_symlink():
-            seeded.extend(_seed_missing_regular_files(source, destination))
-            continue
-        safe_destination = _safe_destination_directory(destination)
-        if not any(path.is_file() and not path.is_symlink() for path in safe_destination.rglob("*")):
-            raise RuntimeError(f"packaged seed directory is unavailable: {source}")
-    return tuple(seeded)
-
-
-def run_noctalia(arguments: list[str], environment: Mapping[str, str]) -> NoReturn:
-    command = noctalia_argv(arguments)
-    os.execvpe(command[0], command, noctalia_profile_environment(environment))
-    raise RuntimeError("noctalia exec unexpectedly returned")
-
-
-def _noctalia_ipc(arguments: list[str], environment: Mapping[str, str]) -> dict[str, JsonValue]:
-    command = noctalia_argv(["msg", *arguments])
     try:
         completed = subprocess.run(
             command,
-            env=noctalia_profile_environment(environment),
             capture_output=True,
             text=True,
             timeout=5,
             check=False,
+            env=dict(environment),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as error:
-        raise ProtocolError("unavailable", f"Noctalia IPC unavailable: {error}") from error
+        raise ProtocolError("unavailable", f"Weyriva shell IPC unavailable: {error}") from error
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip() or "Noctalia IPC failed"
+        detail = completed.stderr.strip() or completed.stdout.strip() or "Weyriva shell IPC failed"
         raise ProtocolError("action_failed", detail)
-    return {"command": arguments[0], "output": completed.stdout.strip()}
+    return {"command": function, "output": completed.stdout.strip()}
 
 
 def niri_config_path(environment: Mapping[str, str]) -> Path:
@@ -450,14 +371,9 @@ def ensure_greeter_state_directory(path: Path, uid: int, gid: int) -> None:
 def reconcile_lock(
     environment: Mapping[str, str],
     *,
-    attempts: int = LOCK_RECONCILE_ATTEMPTS,
-    interval: float = LOCK_RECONCILE_INTERVAL,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-    sleeper: Callable[[float], None] = time.sleep,
 ) -> int:
-    """Reacquire Noctalia's session lock after a shell restart when logind is locked."""
-    if attempts < 1:
-        raise ValueError("lock reconciliation requires at least one attempt")
+    """Fail closed when a replacement shell starts in a locked session."""
     command_options = {
         "capture_output": True,
         "text": True,
@@ -489,34 +405,7 @@ def reconcile_lock(
     if state.returncode != 0:
         return 1
     locked_hint = state.stdout.strip().lower()
-    if locked_hint == "no":
-        return 0
-    if locked_hint != "yes":
-        return 1
-
-    child_environment = noctalia_profile_environment(environment)
-    for attempt in range(attempts):
-        try:
-            ready = runner(
-                ["noctalia", "msg", "status"],
-                env=child_environment,
-                **command_options,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            ready = None
-        if ready is not None and ready.returncode == 0:
-            try:
-                locked = runner(
-                    ["noctalia", "msg", "session", "lock"],
-                    env=child_environment,
-                    **command_options,
-                )
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                return 1
-            return 0 if locked.returncode == 0 else 1
-        if attempt + 1 < attempts:
-            sleeper(interval)
-    return 1
+    return 0 if locked_hint == "no" else 1
 
 
 def preflight_startup_chain(target_user: str) -> StartupPlan:
@@ -532,7 +421,10 @@ def preflight_startup_chain(target_user: str) -> StartupPlan:
     required = (
         SESSION_ENTRY,
         GREETD_TEMPLATE,
+        GREETER_ENV,
         GREETER_SESSION,
+        PACKAGED_SHELL_ROOT / "shell.qml",
+        PACKAGED_GREETER_ROOT / "shell.qml",
         PACKAGED_CONFIG_ROOT / "niri/config.kdl",
         *(PACKAGED_DATA_ROOT / "wallpapers" / name for name in REQUIRED_WALLPAPERS),
         *(PACKAGED_UNIT_ROOT / name for name in WEYRIVA_UNITS),
@@ -562,7 +454,12 @@ def preflight_startup_chain(target_user: str) -> StartupPlan:
         raise RuntimeError(f"invalid Weyriva session name: {SESSION_ENTRY}")
     greetd_content = GREETD_TEMPLATE.read_text(encoding="utf-8", errors="replace")
     expected_greeter = (
-        'command = "/usr/bin/noctalia-greeter-session -- --session Weyriva"'
+        'command = "/usr/bin/env HOME=/var/lib/weyriva-greeter '
+        'XDG_STATE_HOME=/var/lib/weyriva-greeter/state '
+        'XDG_CACHE_HOME=/var/lib/weyriva-greeter/cache '
+        'XDG_CONFIG_HOME=/var/lib/weyriva-greeter/config '
+        '/usr/bin/cage -s -- /usr/bin/quickshell --path '
+        '/usr/share/weyriva/greeter"'
     )
     if expected_greeter not in greetd_content or 'user = "greeter"' not in greetd_content:
         raise RuntimeError(f"invalid Weyriva greeter template: {GREETD_TEMPLATE}")
@@ -640,6 +537,12 @@ def ensure_startup_chain(target_user: str) -> int:
         plan.greeter_uid,
         plan.greeter_gid,
     )
+    for directory in GREETER_PRIVATE_DIRS:
+        ensure_greeter_state_directory(
+            directory,
+            plan.greeter_uid,
+            plan.greeter_gid,
+        )
     greetd_changed = reconcile_startup_file(
         GREETD_TEMPLATE,
         GREETD_CONFIG,
@@ -681,11 +584,7 @@ def diagnose_checks() -> tuple[DiagnosticCheck, ...]:
     for command in RUNTIME_COMMANDS:
         location = _diagnostic_command(command)
         if location is None:
-            status = (
-                "fail"
-                if command in {"niri", "niri-session", "noctalia", "noctalia-greeter-session"}
-                else "warn"
-            )
+            status = "fail" if command in {"niri", "niri-session", "quickshell", "cage"} else "warn"
             checks.append(_diagnostic_check(f"command:{command}", status, "not installed"))
         else:
             checks.append(_diagnostic_check(f"command:{command}", "ok", location))
@@ -717,10 +616,15 @@ def diagnose_checks() -> tuple[DiagnosticCheck, ...]:
         if "start-hyprland" in content or "agreety" in content:
             checks.append(_diagnostic_check("greetd", "fail", "still points to Hyprland/agreety"))
         elif (
-            "/usr/bin/noctalia-greeter-session -- --session Weyriva" in content
+            "HOME=/var/lib/weyriva-greeter" in content
+            and "XDG_STATE_HOME=/var/lib/weyriva-greeter/state" in content
+            and "XDG_CACHE_HOME=/var/lib/weyriva-greeter/cache" in content
+            and "XDG_CONFIG_HOME=/var/lib/weyriva-greeter/config" in content
+            and "/usr/bin/cage -s -- /usr/bin/quickshell --path /usr/share/weyriva/greeter"
+            in content
             and 'user = "greeter"' in content
         ):
-            checks.append(_diagnostic_check("greetd", "ok", "Weyriva Noctalia Greeter is configured"))
+            checks.append(_diagnostic_check("greetd", "ok", "Weyriva Greeter is configured"))
         elif "tuigreet" in content:
             checks.append(_diagnostic_check("greetd", "fail", "obsolete tuigreet login surface is configured"))
         else:
@@ -1033,28 +937,25 @@ def dispatch(
         case "weyriva.launcher.open":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "launcher.open takes no parameters")
-            return _noctalia_ipc(["panel-toggle", "launcher"], os.environ)
+            return _shell_ipc("route", "launcher")
         case "weyriva.notifications.dismiss_all":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "notifications.dismiss_all takes no parameters")
-            return _noctalia_ipc(["notification-clear-active"], os.environ)
+            return _shell_ipc("clearNotifications")
         case "weyriva.notifications.dnd":
             if params in ({}, None):
-                return _noctalia_ipc(["notification-dnd-toggle"], os.environ)
+                return _shell_ipc("toggleDnd")
             if isinstance(params, dict) and set(params) == {"enabled"} and isinstance(params["enabled"], bool):
-                return _noctalia_ipc(
-                    ["notification-dnd-set", "on" if params["enabled"] else "off"],
-                    os.environ,
-                )
+                return _shell_ipc("setDnd", "true" if params["enabled"] else "false")
             raise ProtocolError("invalid_params", 'notifications.dnd takes no parameters or {"enabled": bool}')
         case "weyriva.panel.toggle":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "panel.toggle takes no parameters")
-            return _noctalia_ipc(["bar-toggle"], os.environ)
+            return _shell_ipc("toggleBar")
         case "weyriva.panel.reload":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "panel.reload takes no parameters")
-            return _noctalia_ipc(["config-reload"], os.environ)
+            return _shell_ipc("reload")
         case "weyriva.niri.outputs":
             if params not in ({}, None):
                 raise ProtocolError("invalid_params", "niri.outputs takes no parameters")
@@ -1166,17 +1067,23 @@ def acquire_daemon_lock(path: Path) -> TextIO:
     return lock
 
 
+def remove_stale_daemon_socket(path: Path) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if not stat.S_ISSOCK(mode):
+        raise RuntimeError(f"refusing to replace non-socket path: {path}")
+    path.unlink()
+
+
 def run_daemon() -> int:
     path = socket_path()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     path.parent.chmod(0o700)
     lock = acquire_daemon_lock(path.parent / "daemon.lock")
     try:
-        if path.exists() or path.is_socket():
-            mode = path.lstat().st_mode
-            if not stat.S_ISSOCK(mode):
-                raise RuntimeError(f"refusing to replace non-socket path: {path}")
-            path.unlink()
+        remove_stale_daemon_socket(path)
         registry = discover_plugins()
         server = IpcServer(str(path), registry)
         path.chmod(0o600)
@@ -1228,28 +1135,6 @@ def _json_argument(value: str) -> JsonValue:
         raise argparse.ArgumentTypeError(f"invalid JSON: {error.msg}") from error
 
 
-def plugin_noctalia_arguments(arguments: argparse.Namespace) -> list[str]:
-    command = arguments.plugin_command
-    if command == "list":
-        return ["msg", "plugins", "list"]
-    if command in {"install", "enable"}:
-        return ["msg", "plugins", "enable", arguments.plugin_id]
-    if command == "disable":
-        return ["msg", "plugins", "disable", arguments.plugin_id]
-    if command == "update":
-        return ["msg", "plugins", "update", arguments.source_name]
-    if command == "lint":
-        return ["plugins", "lint", *arguments.paths]
-    if command == "source":
-        forwarded = ["msg", "plugins", "source", arguments.source_command]
-        if arguments.source_command == "add":
-            forwarded.extend((arguments.name, arguments.kind, arguments.location))
-        elif arguments.source_command == "remove":
-            forwarded.append(arguments.name)
-        return forwarded
-    raise RuntimeError(f"unsupported native plugin command: {command}")
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="weyriva", description="Weyriva Shell control plane")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
@@ -1267,41 +1152,24 @@ def build_parser() -> argparse.ArgumentParser:
     call = ipc_commands.add_parser("call", help="call an IPC method")
     call.add_argument("method")
     call.add_argument("--params", type=_json_argument, default={})
-    shell = commands.add_parser("shell", help="run and control the Noctalia shell engine")
+    shell = commands.add_parser("shell", help="run and control the Weyriva shell")
     shell_commands = shell.add_subparsers(dest="shell_command", required=True)
-    shell_commands.add_parser("run", help="run the isolated Weyriva shell profile")
+    shell_commands.add_parser("run", help="run the packaged Weyriva shell")
     shell_commands.add_parser(
         "reconcile-lock",
-        help="reacquire the Noctalia lock after a shell restart when logind remains locked",
+        help="fail closed after a shell restart unless logind confirms the session is unlocked",
     )
-    shell_msg = shell_commands.add_parser("msg", help="send a native Noctalia IPC command")
-    shell_msg.add_argument("message_command")
-    shell_msg.add_argument("message_arguments", nargs=argparse.REMAINDER)
-    shell_config = shell_commands.add_parser("config", help="run a native Noctalia config command")
-    shell_config.add_argument("config_command")
-    shell_config.add_argument("config_arguments", nargs=argparse.REMAINDER)
-    plugin = commands.add_parser("plugin", help="manage native Noctalia and legacy executable plugins")
+    shell_route = shell_commands.add_parser("route", help="open a Weyriva surface")
+    shell_route.add_argument(
+        "name",
+        choices=("launcher", "control-center", "calendar", "notifications", "wallpaper", "settings"),
+    )
+    shell_commands.add_parser("lock", help="secure the current session")
+    plugin = commands.add_parser("plugin", help="manage legacy executable plugins")
     plugin_commands = plugin.add_subparsers(dest="plugin_command", required=True)
-    plugin_commands.add_parser("list", help="list native Noctalia plugins")
-    for command_name in ("install", "enable", "disable"):
-        native_plugin = plugin_commands.add_parser(command_name)
-        native_plugin.add_argument("plugin_id", help="canonical author/plugin identifier")
-    plugin_update = plugin_commands.add_parser("update", help="update one native plugin source")
-    plugin_update.add_argument("source_name")
-    plugin_lint = plugin_commands.add_parser("lint", help="lint native Noctalia plugin sources")
-    plugin_lint.add_argument("paths", nargs="*")
-    plugin_source = plugin_commands.add_parser("source", help="manage native Noctalia plugin sources")
-    plugin_source_commands = plugin_source.add_subparsers(dest="source_command", required=True)
-    plugin_source_commands.add_parser("list")
-    plugin_source_add = plugin_source_commands.add_parser("add")
-    plugin_source_add.add_argument("name")
-    plugin_source_add.add_argument("kind", choices=("git", "path"))
-    plugin_source_add.add_argument("location")
-    plugin_source_remove = plugin_source_commands.add_parser("remove")
-    plugin_source_remove.add_argument("name")
-    plugin_commands.add_parser("legacy-list", help="list legacy executable plugin methods")
-    plugin_commands.add_parser("legacy-reload", help="reload legacy executable plugin manifests")
-    plugin_validate = plugin_commands.add_parser("legacy-validate", help="validate a legacy plugin manifest")
+    plugin_commands.add_parser("list", help="list executable plugin methods")
+    plugin_commands.add_parser("reload", help="reload executable plugin manifests")
+    plugin_validate = plugin_commands.add_parser("validate", help="validate an executable plugin manifest")
     plugin_validate.add_argument("path", help="path to the manifest JSON file")
     session = commands.add_parser("session", help="manage the desktop session")
     session_commands = session.add_subparsers(dest="session_command", required=True)
@@ -1368,30 +1236,29 @@ def main(argv: list[str] | None = None) -> int:
             _print_json(response)
             return 0 if "result" in response else 1
         if args.command == "shell" and args.shell_command == "run":
-            seed_noctalia_profile(os.environ)
-            run_noctalia([], os.environ)
+            run_shell(os.environ)
         if args.command == "shell" and args.shell_command == "reconcile-lock":
             return reconcile_lock(os.environ)
-        if args.command == "shell" and args.shell_command == "msg":
-            run_noctalia(["msg", args.message_command, *args.message_arguments], os.environ)
-        if args.command == "shell" and args.shell_command == "config":
-            run_noctalia(["config", args.config_command, *args.config_arguments], os.environ)
-        if args.command == "plugin" and args.plugin_command == "legacy-list":
+        if args.command == "shell" and args.shell_command == "route":
+            _print_json(_shell_ipc("route", args.name))
+            return 0
+        if args.command == "shell" and args.shell_command == "lock":
+            _print_json(_shell_ipc("lock"))
+            return 0
+        if args.command == "plugin" and args.plugin_command == "list":
             _print_json(plugin_summary(discover_plugins()))
             return 0
-        if args.command == "plugin" and args.plugin_command == "legacy-reload":
+        if args.command == "plugin" and args.plugin_command == "reload":
             response = ipc_call("weyriva.plugin.reload", {})
             _print_json(response)
             return 0 if "result" in response else 1
-        if args.command == "plugin" and args.plugin_command == "legacy-validate":
+        if args.command == "plugin" and args.plugin_command == "validate":
             try:
                 _print_json(validate_manifest(Path(args.path).expanduser()))
             except PluginError as error:
                 print(f"weyriva: invalid manifest: {error}", file=sys.stderr)
                 return 1
             return 0
-        if args.command == "plugin":
-            run_noctalia(plugin_noctalia_arguments(args), os.environ)
         if args.command == "session" and args.session_command == "start":
             start_session(sys.argv[0], os.environ)
         raise RuntimeError("unhandled command")

@@ -2,11 +2,11 @@
 pkgname=weyriva-shell-git
 pkgver=0.1.0.r0.g0000000
 pkgrel=1
-pkgdesc='A Noctalia-powered niri desktop environment with Weyriva IPC and plugins (Git version)'
+pkgdesc='An independent Quickshell desktop environment for Niri (Git version)'
 arch=('any')
 url='https://github.com/LIghtJUNction/weyriva-shell'
 license=('MIT')
-depends=('python' 'systemd>=254' 'niri' 'greetd' 'noctalia' 'noctalia-greeter' 'foot' 'noto-fonts')
+depends=('python' 'systemd>=254' 'niri' 'greetd' 'quickshell>=0.3' 'cage' 'foot' 'noto-fonts')
 makedepends=('git')
 provides=('weyriva-shell')
 conflicts=('weyriva-shell')
@@ -22,8 +22,9 @@ package() {
   cd weyriva-shell
   install -Dm755 bin/weyriva "$pkgdir/usr/bin/weyriva"
   install -Dm644 config/niri/config.kdl "$pkgdir/usr/share/weyriva/config/niri/config.kdl"
-  install -Dm644 config/noctalia/config.toml "$pkgdir/usr/share/weyriva/config/noctalia/config.toml"
-  install -Dm644 config/noctalia/palettes/Weyriva.json "$pkgdir/usr/share/weyriva/config/noctalia/palettes/Weyriva.json"
+  cp -a shell "$pkgdir/usr/share/weyriva/"
+  cp -a greeter "$pkgdir/usr/share/weyriva/"
+  cp -a config/weyriva "$pkgdir/usr/share/weyriva/config/"
   install -Dm644 config/greetd/config.toml "$pkgdir/usr/share/weyriva/greetd/config.toml"
   install -Dm644 assets/wallpapers/weyriva-cactus.png "$pkgdir/usr/share/weyriva/wallpapers/light/weyriva-cactus.png"
   install -Dm644 assets/wallpapers/weyriva-cactus-dark.png "$pkgdir/usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png"

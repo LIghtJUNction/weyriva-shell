@@ -15,7 +15,8 @@ BIN_HOME="$HOME/.local/bin"
 log "Weyriva user installation ($([[ $WEYRIVA_APPLY -eq 1 ]] && echo apply || echo dry-run))"
 install_file "$WEYRIVA_ROOT/bin/weyriva" "$BIN_HOME/weyriva" 0755
 install_tree "$WEYRIVA_ROOT/config/niri" "$CONFIG_HOME/niri"
-install_tree "$WEYRIVA_ROOT/config/noctalia" "$CONFIG_HOME/weyriva/noctalia"
+install_tree "$WEYRIVA_ROOT/config/weyriva" "$CONFIG_HOME/weyriva"
+install_tree "$WEYRIVA_ROOT/shell" "$DATA_HOME/weyriva/shell"
 install_file \
     "$WEYRIVA_ROOT/assets/wallpapers/weyriva-cactus.png" \
     "$DATA_HOME/weyriva/wallpapers/light/weyriva-cactus.png"

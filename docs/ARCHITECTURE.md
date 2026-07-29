@@ -1,166 +1,125 @@
 # Architecture
 
-Weyriva is a branded, opinionated Niri distribution of the upstream Noctalia
-v5 engine. It does not reproduce Noctalia surfaces in Python, Waybar, or a
-second plugin host. Noctalia Greeter owns the visible login surface; Noctalia
-v5 owns the desktop and in-session lock surface.
+Weyriva is an independent desktop shell built with Quickshell 0.3 and QtQuick
+for a Niri Wayland session. Weyriva owns every visible surface. greetd is the
+internal PAM/VT/session broker. Noctalia is neither a runtime dependency nor a
+surface owner in the target architecture; it is a pinned public behavior and
+plugin-ABI reference.
 
-This document defines the intended end state. Installed/runtime acceptance is
-tracked separately in [Noctalia parity](NOCTALIA_PARITY.md).
+The repository is in migration. This document defines the end state and labels
+current evidence without treating transitional delegation code as product
+architecture.
 
-## System chain
+## Process model
 
-```text
-display-manager.service
-└─ greetd.service
-   └─ noctalia-greeter-session
-      ├─ noctalia-greeter-compositor
-      └─ noctalia-greeter
-         └─ PAM-authenticated request through GREETD_SOCK
-            └─ weyriva.desktop
-               └─ weyriva session start
-                  └─ niri-session
-                     └─ niri.service / graphical-session.target
-                        ├─ weyriva-shell.service
-                        └─ weyriva-ipc.service
-```
-
-greetd is not removed. It is the hidden privileged broker for VT/seat control,
-PAM, credential and account transition, session accounting, and starting the
-selected Wayland session. Weyriva does not rewrite PAM or provide autologin.
-TTY2 remains the permanent recovery path.
-
-Noctalia Greeter replaces tuigreet in the target architecture. Exact login,
-lock, recovery, and logging behavior is in
-[Session lifecycle](SESSION_LIFECYCLE.md).
-
-## Surface ownership
-
-One session has one owner for each visible surface:
-
-| Surface | Owner |
-| --- | --- |
-| Login | Noctalia Greeter |
-| Compositor/window layout | Niri |
-| Bar/tray/taskbar | Noctalia v5 |
-| Launcher/control center/settings | Noctalia v5 |
-| Notifications/history | Noctalia v5 |
-| Clipboard history | Noctalia v5 |
-| Wallpaper/backdrop | Noctalia v5 |
-| OSD/screenshots | Noctalia v5 |
-| Idle/lock/session controls | Noctalia v5 |
-| Desktop/lock widgets | Noctalia v5 |
-| Current v5 plugin UI/services | Noctalia v5 |
-
-Waybar, fuzzel, mako, swaybg, swaylock, and swayidle must not be started beside
-Noctalia. Duplicate process ownership causes the exact class of “visible but
-dead” or conflicting controls this architecture is designed to prevent.
-
-## Isolated profile
-
-Before executing Noctalia, `weyriva shell` sets:
+Target boot and session chain:
 
 ```text
-NOCTALIA_CONFIG_HOME = $XDG_CONFIG_HOME/weyriva
-NOCTALIA_STATE_HOME  = $XDG_STATE_HOME/weyriva
-NOCTALIA_DATA_HOME   = $XDG_DATA_HOME/weyriva
+systemd
+└─ greetd.service                    privileged, non-visual broker
+   └─ Weyriva Greeter                planned Quickshell login surface
+      └─ greetd PAM/session request
+         └─ niri-session
+            ├─ Weyriva Shell         Quickshell desktop + lock surfaces
+            └─ Weyriva control plane native or bounded sidecar
 ```
 
-Noctalia appends `/noctalia`. The resulting profile contains declarative
-configuration, app-managed overrides, palette and wallpaper assets, plugin
-sources, materialized plugins, and catalog state without adopting a user's
-standalone Noctalia profile.
+The exact greeter executable and service wiring remain in progress. A
+Noctalia-branded greeter or shell is not an acceptable final implementation.
 
-The packaged defaults are deterministic:
+## Ownership
 
-- wallpaper-derived `soft` colors with a complete palette available as an
-  explicit offline fallback selection;
-- light, dark, and fixed-schedule automatic mode;
-- one 400ms wallpaper fade;
-- launcher, terminal, clipboard, workspaces, DND, theme, status, and recovery
-  at first-class reach;
-- official and community Noctalia v5 plugin sources.
+| Boundary | Owner | Current status |
+|---|---|---|
+| PAM, VT, seat, account transition | greetd and distribution PAM stack | Implemented scaffold; live acceptance pending |
+| Login visuals and input | Weyriva Greeter | In progress |
+| Compositing and workspace policy | Niri | Implemented configuration; live acceptance pending |
+| Bar, tray, launcher, calendar, control center | Weyriva Shell | In progress |
+| Notifications, clipboard, wallpaper, OSD, settings | Weyriva Shell | In progress |
+| Screenshot UX and desktop widgets | Weyriva Shell | In progress |
+| Authenticated lock and idle UI | Weyriva Shell | In progress |
+| Native shell IPC | Weyriva Shell | In progress |
+| Local diagnostic JSON IPC | Weyriva control daemon | Implemented locally; integration pending |
+| Plugin compatibility hosts | Weyriva | In progress |
 
-## systemd user lifecycle
+No two processes may own the same visible surface. Parallel bars, launchers,
+notification daemons, wallpaper hosts, or lockers are rejected because they
+produce ambiguous input and lifecycle ownership.
 
-Niri's systemd integration owns `graphical-session.target`. Weyriva units are
-enabled through `niri.service.wants`, not started twice through an additional
-Niri `spawn-at-startup`.
+## Runtime layers
 
-`weyriva-shell.service` executes:
+The native runtime has four logical layers:
 
-```bash
-weyriva shell run
-```
+1. **Platform adapters** — Niri IPC, Wayland protocols, logind, PipeWire,
+   portals, network, power, and clipboard.
+2. **State and policy** — session state, settings, theme tokens, notification
+   model, plugin registry, and recovery decisions.
+3. **Surface controllers** — lifecycle and focus ownership for each shell,
+   greeter, panel, overlay, and lock surface.
+4. **QtQuick presentation** — components, layout, input, animation, semantics,
+   and the project-owned visual system.
 
-The CLI uses an argument array and replaces itself with the Noctalia binary.
-The service is graphical-session-bound, restarts on failure with a maximum of
-three attempts in 30 seconds, and invokes a failsafe session exit after that
-budget. It must not declare `WatchdogSec`, because Noctalia does not send
-watchdog keepalives.
+Adapters must not reach directly into visual components. Surface controllers
+translate state into explicit view models and actions. This keeps tests
+deterministic and prevents panels from becoming collections of shell commands.
 
-After a crash in a locked session, the replacement shell must reconcile logind
-state and immediately reacquire `ext-session-lock-v1`; if it cannot prove that
-secure state, it exits the graphical session and returns to Greeter.
+## Session and privilege boundary
 
-These behaviors require live failure injection before acceptance.
+greetd owns only privileged login mechanics. Weyriva Greeter communicates over
+`GREETD_SOCK`, displays authentication progress, and requests a session. It
+does not read password databases, invent an authentication protocol, modify
+the distribution PAM stack, or enable autologin.
+
+The desktop process runs as the authenticated user. Privileged actions must use
+an existing narrowly scoped system mechanism and expose progress and failure;
+the shell must never gain broad root privileges.
+
+The lock surface belongs to the authenticated session and must acquire
+`ext-session-lock-v1`. If recovery cannot prove secure ownership after a shell
+failure, the safe outcome is to terminate the graphical session and return to
+the greeter.
 
 ## Control planes
 
-There are two intentionally separate control planes:
+Weyriva reserves `weyriva.*` for its versioned JSON control protocol. The
+native shell IPC surface is independent of any reference implementation.
+Transitional bridges may remain during migration, but they are not documented
+as stable product APIs and must be removed before release.
 
-1. `weyriva shell msg ...` delegates native commands to the running Noctalia
-   engine using the isolated profile.
-2. `weyriva ipc call weyriva.*` speaks Weyriva's versioned local JSON protocol
-   for diagnostics, compositor queries, and legacy executable plugins.
-
-Neither lane joins user arguments into a shell command. The exact boundary is
-documented in [IPC](IPC.md).
+All control paths use structured argument arrays or typed messages. User
+content must never be interpolated into shell command strings.
 
 ## Plugin architecture
 
-There are three distinct lanes:
+Plugin compatibility is implemented by Weyriva-owned hosts:
 
-1. **Native Noctalia v5.** `plugin.toml` and trusted Luau run directly in the
-   installed Noctalia engine and its engine-declared API range.
-2. **Legacy Weyriva executables.** Version-1 JSON manifests extend only the
-   reserved local IPC lane.
-3. **Legacy Noctalia v4 QML.** `manifest.json` and QML require an isolated
-   Quickshell companion host and remain unimplemented/unaccepted.
+1. a trusted Luau host compatible with the documented Noctalia v5 public ABI;
+2. an isolated Quickshell/QML host for the documented Noctalia v4 public ABI;
+3. the existing bounded executable-plugin lane, explicitly marked legacy.
 
-Noctalia v5 exposes disable, not per-plugin deletion. Details are in
-[Plugins](PLUGINS.md).
-
-## Privilege and security boundaries
-
-- greetd owns PAM/VT/session privilege; Weyriva does not imitate it in a user
-  service.
-- Greeter appearance sync stages user data and invokes the packaged privileged
-  apply helper through polkit/run0.
-- `greeter.toml` is declarative and wins over mutable `sync.toml`.
-- Native and legacy plugins are trusted user code, not sandboxed.
-- The `weyriva.*` socket is protected by per-user filesystem permissions, not
-  an authentication protocol.
-- User files and state outside managed Weyriva paths are not adopted or
-  overwritten without preservation.
+Noctalia source internals are not copied. Compatibility is established through
+public docs, manifests, and black-box conformance fixtures. Details are in
+[Plugins](PLUGINS.md) and
+[the compatibility contract](plugins/compatibility-contract.md).
 
 ## Design boundary
 
-Apple-inspired interaction rules govern hierarchy, material, input, and motion.
-Anthropic-inspired project artwork is restricted to wallpaper and illustration
-layers. Neither reference implies endorsement. See
-[Design system](DESIGN_SYSTEM.md), [Theming](THEMING.md), and
-[Motion](MOTION.md).
+The QtQuick component library implements the Weyriva design system. Apple-style
+fluidity is translated into immediate feedback, direct tracking, velocity-aware
+interruptible motion, and reduced-motion alternatives. Anthropic-style art is
+translated into an original flat editorial grammar. Neither reference controls
+runtime architecture.
 
-## Invariants
+## Migration invariants
 
-- One login surface, one compositor, one shell engine, one owner per surface.
-- greetd remains an internal privileged broker; no PAM rewrite or autologin.
-- TTY2 recovery remains available.
-- Niri/systemd starts each Weyriva user service once.
-- Lock reconciliation fails closed.
-- The Noctalia engine always receives the isolated Weyriva roots.
-- Native v5 plugins run unchanged through their installed engine.
-- v4 compatibility is not claimed before its companion host and real tests.
-- Installation has one default and no personalization prompt.
-- Completion requires repository, package, interaction, and XRY evidence.
+- Weyriva is the only visible shell/greeter/lock owner.
+- greetd remains the internal PAM/VT broker.
+- Niri remains the compositor.
+- Noctalia is reference material only.
+- A rendered surface is not accepted until its controls work.
+- Manifest parsing and catalog listing are not plugin compatibility.
+- Source, package, installed runtime, and XRY evidence are reported separately.
+- Unsupported or unverified behavior is visible in the ledger, never implied.
+
+See [Session lifecycle](SESSION_LIFECYCLE.md),
+[IPC](IPC.md), and [Testing](TESTING.md).
