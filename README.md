@@ -37,7 +37,8 @@ Run the one supported setup command from a checkout:
 ./install.sh
 ```
 
-It installs Niri, Waybar, fuzzel, mako, swaybg, Foot, and Noto Sans, then
+It installs Niri, Waybar, fuzzel, mako, swaybg, Foot, Noto Sans, and
+pavucontrol; Arch-family systems also receive gsimplecal. It then
 automatically makes timestamped backups and replaces the Weyriva-managed user
 files. There are no installer choices or configuration prompts. The installer
 does not enable or restart greetd or a graphical session. Weyriva has one
@@ -93,6 +94,10 @@ per-user wallpaper override under XDG config, restarts the wallpaper service whe
 user service manager is available, and `reset` returns to the bundled cactus
 artwork. The primary session shortcuts are Mod+Space (launcher), Mod+Return
 (terminal), Mod+B (panel), Mod+N (do-not-disturb), and Print (screenshot).
+
+The Waybar clock, network, audio, and battery controls are clickable: they open
+the calendar, NetworkManager controls, audio controls, and power details. When a
+graphical helper is unavailable, Weyriva opens a readable Foot fallback instead.
 
 `weyriva diagnose` is the Niri-only health check for the compositor, session entry,
 greetd login path, required desktop commands, user services, and the current Niri

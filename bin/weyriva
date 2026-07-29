@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import fcntl
 import json
 import os
@@ -68,6 +69,7 @@ BUILTIN_METHODS: Final = (
 WALLPAPER_FILE: Final = "weyriva-cactus.png"
 WALLPAPER_SERVICE: Final = "weyriva-wallpaper.service"
 PACKAGED_WALLPAPER_ROOT: Final = Path("/usr/share/weyriva/wallpapers")
+DESKTOP_ACTIONS: Final = ("calendar", "network", "audio", "power")
 
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 
@@ -610,6 +612,69 @@ def _spawn_fixed(command: list[str]) -> dict[str, JsonValue]:
     return {"pid": process.pid, "command": command[0]}
 
 
+def _desktop_terminal_argv(action: str, executable: str | None = None) -> list[str]:
+    if _diagnostic_command("foot") is None:
+        raise ProtocolError("unavailable", "Foot is required to show this desktop control")
+    return ["foot", "-e", executable or sys.argv[0], "desktop", action, "--terminal"]
+
+
+def desktop_action_argv(action: str, executable: str | None = None) -> list[str]:
+    if action not in DESKTOP_ACTIONS:
+        raise ProtocolError("invalid_action", f"unsupported desktop action: {action}")
+    if action == "calendar" and _diagnostic_command("gsimplecal") is not None:
+        return ["gsimplecal"]
+    if action == "network" and _diagnostic_command("nmtui") is not None:
+        if _diagnostic_command("foot") is None:
+            raise ProtocolError("unavailable", "Foot is required to open NetworkManager controls")
+        return ["foot", "-e", "nmtui"]
+    if action == "audio" and _diagnostic_command("pavucontrol") is not None:
+        return ["pavucontrol"]
+    return _desktop_terminal_argv(action, executable)
+
+
+def _terminal_detail_command(action: str) -> list[str] | None:
+    return {
+        "network": ["ip", "-brief", "address"],
+        "audio": ["wpctl", "status"],
+        "power": ["upower", "-d"],
+    }.get(action)
+
+
+def _show_terminal_desktop_action(action: str) -> int:
+    if action == "calendar":
+        now = time.localtime()
+        print(calendar.TextCalendar().formatmonth(now.tm_year, now.tm_mon), end="")
+    else:
+        command = _terminal_detail_command(action)
+        assert command is not None
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+        except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+            print(f"{action} details unavailable: {error}")
+        else:
+            output = completed.stdout.strip() or completed.stderr.strip()
+            if completed.returncode == 0 and output:
+                print(output)
+            elif output:
+                print(f"{action} details unavailable: {output}")
+            else:
+                print(f"{action} details unavailable")
+    try:
+        input("\nPress Enter to close. ")
+    except EOFError:
+        pass
+    return 0
+
+
+def run_desktop_action(action: str, terminal: bool = False, executable: str | None = None) -> int:
+    if action not in DESKTOP_ACTIONS:
+        raise ProtocolError("invalid_action", f"unsupported desktop action: {action}")
+    if terminal:
+        return _show_terminal_desktop_action(action)
+    _spawn_fixed(desktop_action_argv(action, executable))
+    return 0
+
+
 def _makoctl_mode(arguments: list[str]) -> dict[str, JsonValue]:
     try:
         completed = subprocess.run(
@@ -978,6 +1043,9 @@ def build_parser() -> argparse.ArgumentParser:
     session_commands.add_parser("start", help="start niri as the current session")
     component = commands.add_parser("component", help="run a managed Niri desktop component")
     component.add_argument("name", choices=("waybar", "mako", "fuzzel"))
+    desktop = commands.add_parser("desktop", help="open a built-in desktop control")
+    desktop.add_argument("action", choices=DESKTOP_ACTIONS)
+    desktop.add_argument("--terminal", action="store_true", help=argparse.SUPPRESS)
     wallpaper = commands.add_parser("wallpaper", help="run or configure the Weyriva wallpaper")
     wallpaper_commands = wallpaper.add_subparsers(dest="wallpaper_command")
     wallpaper_set = wallpaper_commands.add_parser("set", help="use a custom wallpaper image")
@@ -1062,6 +1130,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "component":
             command = component_argv(args.name, os.environ)
             os.execvp(command[0], command)
+        if args.command == "desktop":
+            return run_desktop_action(args.action, args.terminal)
         if args.command == "session" and args.session_command == "start":
             start_session(sys.argv[0], os.environ)
         if args.command == "wallpaper":
@@ -1074,7 +1144,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             run_wallpaper(os.environ)
         raise RuntimeError("unhandled command")
-    except (ConnectionError, FileNotFoundError, OSError, RuntimeError, socket.timeout, json.JSONDecodeError) as error:
+    except (ConnectionError, FileNotFoundError, OSError, ProtocolError, RuntimeError, socket.timeout, json.JSONDecodeError) as error:
         print(f"weyriva: {error}", file=sys.stderr)
         return 1
 

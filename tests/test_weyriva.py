@@ -29,7 +29,7 @@ class InstallerTests(unittest.TestCase):
         for manager in ("pacman", "dnf", "apt-get", "zypper"):
             self.assertIn(manager, content)
         self.assertIn(
-            "pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot noto-fonts",
+            "pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot noto-fonts gsimplecal pavucontrol",
             content,
         )
 
@@ -44,6 +44,21 @@ class InstallerTests(unittest.TestCase):
     def test_aur_package_does_not_require_nerd_symbols(self) -> None:
         package = (ROOT / "packaging/aur/PKGBUILD").read_text()
         self.assertNotIn("ttf-nerd-fonts-symbols-mono", package)
+        self.assertIn("'gsimplecal'", package)
+        self.assertIn("'pavucontrol'", package)
+
+    def test_waybar_visible_controls_have_fixed_click_actions(self) -> None:
+        config = json.loads((ROOT / "config/waybar/config.jsonc").read_text())
+        expected = {
+            "clock": "weyriva desktop calendar",
+            "network": "weyriva desktop network",
+            "pulseaudio": "weyriva desktop audio",
+            "battery": "weyriva desktop power",
+        }
+        for module, action in expected.items():
+            with self.subTest(module=module):
+                self.assertEqual(config[module]["on-click"], action)
+                self.assertIn("Click:", config[module]["tooltip-format"])
 
 
 class ProtocolTests(unittest.TestCase):
@@ -485,6 +500,74 @@ class ControlMethodTests(unittest.TestCase):
         arguments = weyriva.build_parser().parse_args(["plugin", "validate", "demo.json"])
         self.assertEqual(arguments.plugin_command, "validate")
         self.assertEqual(arguments.path, "demo.json")
+
+
+class DesktopControlTests(unittest.TestCase):
+    def _available(self, *commands: str) -> mock.Mock:
+        available = set(commands)
+        return mock.Mock(side_effect=lambda command: f"/usr/bin/{command}" if command in available else None)
+
+    def test_parser_accepts_only_the_four_desktop_actions(self) -> None:
+        parser = weyriva.build_parser()
+        for action in weyriva.DESKTOP_ACTIONS:
+            with self.subTest(action=action):
+                arguments = parser.parse_args(["desktop", action])
+                self.assertEqual(arguments.action, action)
+                self.assertFalse(arguments.terminal)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["desktop", "launch-anything"])
+
+    def test_calendar_and_audio_prefer_graphical_helpers(self) -> None:
+        with mock.patch.object(weyriva.shutil, "which", self._available("gsimplecal", "pavucontrol")):
+            self.assertEqual(weyriva.desktop_action_argv("calendar"), ["gsimplecal"])
+            self.assertEqual(weyriva.desktop_action_argv("audio"), ["pavucontrol"])
+
+    def test_network_prefers_nmtui_in_foot(self) -> None:
+        with mock.patch.object(weyriva.shutil, "which", self._available("foot", "nmtui")):
+            self.assertEqual(weyriva.desktop_action_argv("network"), ["foot", "-e", "nmtui"])
+
+    def test_missing_graphical_helpers_use_the_fixed_terminal_adapter(self) -> None:
+        with mock.patch.object(weyriva.shutil, "which", self._available("foot")):
+            self.assertEqual(
+                weyriva.desktop_action_argv("calendar", "/usr/bin/weyriva"),
+                ["foot", "-e", "/usr/bin/weyriva", "desktop", "calendar", "--terminal"],
+            )
+            self.assertEqual(
+                weyriva.desktop_action_argv("audio", "/usr/bin/weyriva"),
+                ["foot", "-e", "/usr/bin/weyriva", "desktop", "audio", "--terminal"],
+            )
+            self.assertEqual(
+                weyriva.desktop_action_argv("power", "/usr/bin/weyriva"),
+                ["foot", "-e", "/usr/bin/weyriva", "desktop", "power", "--terminal"],
+            )
+        with mock.patch.object(weyriva.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(weyriva.ProtocolError, "Foot"):
+                weyriva.desktop_action_argv("power")
+
+    def test_terminal_details_run_only_fixed_read_only_commands(self) -> None:
+        completed = mock.Mock(returncode=0, stdout="details\n", stderr="")
+        expected = {
+            "network": ["ip", "-brief", "address"],
+            "audio": ["wpctl", "status"],
+            "power": ["upower", "-d"],
+        }
+        for action, command in expected.items():
+            with self.subTest(action=action):
+                with (
+                    mock.patch.object(weyriva.subprocess, "run", return_value=completed) as run,
+                    mock.patch("builtins.input"),
+                ):
+                    self.assertEqual(weyriva.run_desktop_action(action, terminal=True), 0)
+                self.assertEqual(run.call_args.args[0], command)
+
+    def test_desktop_action_spawns_the_selected_fixed_command(self) -> None:
+        with (
+            mock.patch.object(weyriva, "desktop_action_argv", return_value=["pavucontrol"]) as select,
+            mock.patch.object(weyriva, "_spawn_fixed") as spawn,
+        ):
+            self.assertEqual(weyriva.run_desktop_action("audio"), 0)
+        select.assert_called_once_with("audio", None)
+        spawn.assert_called_once_with(["pavucontrol"])
 
 
 class WallpaperTests(unittest.TestCase):

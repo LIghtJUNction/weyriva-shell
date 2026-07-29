@@ -39,16 +39,16 @@ run_as_root() {
 
 case ${managers[0]} in
     pacman)
-        run_as_root pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot noto-fonts
+        run_as_root pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot noto-fonts gsimplecal pavucontrol
         ;;
     dnf)
-        run_as_root dnf install -y niri waybar fuzzel mako swaybg foot google-noto-sans-fonts
+        run_as_root dnf install -y niri waybar fuzzel mako swaybg foot google-noto-sans-fonts pavucontrol
         ;;
     apt-get)
-        run_as_root apt-get install -y niri waybar fuzzel mako swaybg foot fonts-noto-core
+        run_as_root apt-get install -y niri waybar fuzzel mako swaybg foot fonts-noto-core pavucontrol
         ;;
     zypper)
-        run_as_root zypper --non-interactive install niri waybar fuzzel mako swaybg foot google-noto-sans-fonts
+        run_as_root zypper --non-interactive install niri waybar fuzzel mako swaybg foot google-noto-sans-fonts pavucontrol
         ;;
 esac
 

@@ -16,9 +16,9 @@
     "sort-by-number": true
   },
   "niri/window": {"max-length": 48, "icon": true, "format": "{title}"},
-  "clock": {"format": "{:%a  ·  %d %b  ·  %H:%M}", "tooltip-format": "{calendar}"},
-  "network": {"format-wifi": "Wi-Fi  {signalStrength}%", "format-ethernet": "Ethernet", "format-disconnected": "Offline", "tooltip-format": "{ifname}: {essid}"},
-  "pulseaudio": {"format": "Audio  {volume}%", "format-muted": "Audio muted", "scroll-step": 5},
-  "battery": {"format": "Battery  {capacity}%", "format-charging": "Charging  {capacity}%"},
+  "clock": {"format": "{:%a  ·  %d %b  ·  %H:%M}", "tooltip-format": "{calendar}\nClick: open calendar", "on-click": "weyriva desktop calendar"},
+  "network": {"format-wifi": "Wi-Fi  {signalStrength}%", "format-ethernet": "Ethernet", "format-disconnected": "Offline", "tooltip-format": "{ifname}: {essid}\nClick: open network controls", "on-click": "weyriva desktop network"},
+  "pulseaudio": {"format": "Audio  {volume}%", "format-muted": "Audio muted", "scroll-step": 5, "tooltip-format": "Click: open audio controls", "on-click": "weyriva desktop audio"},
+  "battery": {"format": "Battery  {capacity}%", "format-charging": "Charging  {capacity}%", "tooltip-format": "Click: view power details", "on-click": "weyriva desktop power"},
   "tray": {"spacing": 8}
 }

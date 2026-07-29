@@ -8,7 +8,7 @@ Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 niri 组合的现
 ./install.sh
 ```
 
-脚本会安装 Niri、Waybar、fuzzel、mako、swaybg、Foot 和 Noto Sans，随后自动为目标文件创建带时间戳的备份并替换为 Weyriva 配置。安装过程没有选项或个性化提示，也不会启用或重启 greetd 或图形会话。Weyriva 只提供一套默认方案；需要个性化请 Fork 后自行维护。
+脚本会安装 Niri、Waybar、fuzzel、mako、swaybg、Foot、Noto Sans 与 pavucontrol；Arch 系还会安装 gsimplecal，随后自动为目标文件创建带时间戳的备份并替换为 Weyriva 配置。安装过程没有选项或个性化提示，也不会启用或重启 greetd 或图形会话。Weyriva 只提供一套默认方案；需要个性化请 Fork 后自行维护。
 
 `scripts/update.sh` 与 `scripts/uninstall.sh` 仅供从 Git 检出维护项目时使用，仍遵循预览与保留优先的行为。
 
@@ -38,6 +38,7 @@ weyriva wallpaper status
 `weyriva.notifications.dnd` 切换 mako 勿扰模式(默认绑定 Mod+N),也可用
 `--params '{"enabled": true}'` 显式开关;`weyriva.panel.toggle` 隐藏或显示
 Waybar(默认绑定 Mod+B),`weyriva.panel.reload` 重载其配置。
+Waybar 的时钟、网络、音频和电池均可点击，分别打开日历、NetworkManager、音频控制与电源详情；缺少图形工具时会在 Foot 中显示安全的只读回退信息。
 `weyriva wallpaper set` 在用户 XDG 配置下记录自定义壁纸并在用户服务可用时
 自动重启壁纸服务,`reset` 恢复自带壁纸。
 
