@@ -122,7 +122,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(os.access(installer, os.X_OK))
         self.assertIn("[[ $EUID -eq 0 ]]", content)
         self.assertIn("systemd_version", content)
-        self.assertIn("systemd-analyze --user verify", content)
+        self.assertIn("systemd-analyze --user --root=/ verify", content)
         self.assertIn("systemctl cat greetd.service", content)
         self.assertIn("noctalia config validate", content)
         self.assertIn("/usr/bin/weyriva startup ensure --user", content)

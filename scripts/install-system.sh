@@ -56,7 +56,7 @@ fi
 niri validate -c "$ROOT/config/niri/config.kdl"
 niri validate -c "$effective_niri_config"
 noctalia config validate "$ROOT/config/noctalia"
-systemd-analyze --user verify "$ROOT"/systemd/*.service
+systemd-analyze --user --root=/ verify "$ROOT"/systemd/*.service
 systemctl cat greetd.service >/dev/null ||
     fail 'greetd.service is unavailable'
 
