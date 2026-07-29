@@ -12,6 +12,7 @@ fi
 [[ $EUID -eq 0 ]] || fail 'root privileges are required'
 command -v systemctl >/dev/null 2>&1 || fail 'systemd is required'
 command -v getent >/dev/null 2>&1 || fail 'getent is required'
+command -v runuser >/dev/null 2>&1 || fail 'runuser is required'
 for command_name in niri niri-session noctalia noctalia-greeter-session foot; do
     command -v "$command_name" >/dev/null 2>&1 ||
         fail "required command is unavailable: $command_name"
@@ -21,7 +22,7 @@ systemd_version=$(systemctl --version | awk 'NR == 1 { print $2 }')
     fail 'systemd 254 or newer is required'
 
 TARGET_USER=$2
-id -u "$TARGET_USER" >/dev/null 2>&1 || fail "unknown desktop user: $TARGET_USER"
+target_uid=$(id -u "$TARGET_USER") || fail "unknown desktop user: $TARGET_USER"
 greeter_uid=$(id -u greeter 2>/dev/null) ||
     fail 'the greeter account is required'
 greeter_gid=$(getent group greeter | cut -d: -f3)
@@ -56,7 +57,20 @@ fi
 niri validate -c "$ROOT/config/niri/config.kdl"
 niri validate -c "$effective_niri_config"
 noctalia config validate "$ROOT/config/noctalia"
-systemd-analyze --user --root=/ verify "$ROOT"/systemd/*.service
+unit_verify_dir=$(mktemp -d /tmp/weyriva-systemd-verify.XXXXXX)
+chmod 0755 "$unit_verify_dir"
+install -m 0755 "$ROOT/bin/weyriva" "$unit_verify_dir/weyriva"
+for source in "$ROOT"/systemd/*.service; do
+    sed "s#/usr/bin/weyriva#$unit_verify_dir/weyriva#g" \
+        "$source" >"$unit_verify_dir/${source##*/}"
+done
+if ! runuser -u "$TARGET_USER" -- \
+    env XDG_RUNTIME_DIR="/run/user/$target_uid" \
+    systemd-analyze --user verify "$unit_verify_dir"/*.service; then
+    rm -r -- "$unit_verify_dir"
+    fail 'systemd user-unit verification failed'
+fi
+rm -r -- "$unit_verify_dir"
 systemctl cat greetd.service >/dev/null ||
     fail 'greetd.service is unavailable'
 
