@@ -1,0 +1,12 @@
+[
+  {
+    "id": "notes",
+    "title": "Fixture Notes",
+    "category": "development"
+  },
+  {
+    "id": "terminal",
+    "title": "Fixture Terminal",
+    "category": "development"
+  }
+]

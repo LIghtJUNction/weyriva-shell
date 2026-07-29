@@ -3,6 +3,8 @@ Description=Weyriva Shell IPC daemon
 PartOf=graphical-session.target
 After=graphical-session.target
 Requisite=graphical-session.target
+StartLimitIntervalSec=30
+StartLimitBurst=3
 
 [Service]
 Type=simple

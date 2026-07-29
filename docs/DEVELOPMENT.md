@@ -11,15 +11,16 @@ Current repository-owned areas:
 
 | Path | Role |
 |---|---|
-| `bin/weyriva` | CLI, diagnostics, local JSON IPC, and migration helpers |
+| `crates/weyriva/` | Rust CLI/daemon, startup/session/diagnose, shell control, IPC, and plugin lifecycle |
+| `crates/weyriva-luau-host/` | locally tested bounded Rust Luau host for the API 3 launcher-provider slice |
 | `shell/` | native Quickshell desktop and lock source; integration in progress |
 | `greeter/` | native Quickshell greetd client source; system acceptance pending |
 | `config/weyriva/` | project-owned deterministic defaults |
 | `config/niri/` | Niri session policy and bindings |
 | `config/greetd/` | privileged broker template; not the visible greeter |
-| `systemd/` | current user-session service scaffolding |
-| `scripts/`, `install.sh` | zero-choice installation and update scaffolding |
-| `tests/` | repository-level regression tests |
+| `systemd/` | bounded user-session units invoking the Rust control plane |
+| `scripts/`, `install.sh` | zero-choice installation/update paths building and installing both Rust binaries |
+| `tests/` | repository-level regression tests; Python is test tooling only |
 | `docs/` | architecture, behavior, compatibility, and acceptance contracts |
 
 The earlier `config/noctalia/` runtime profile has been removed from the live
@@ -38,17 +39,53 @@ surface or system behavior.
 - Noctalia is public reference material only.
 - plugins are trusted code but still receive bounded, isolated runtimes where
   the ABI permits.
+- Rust owns production CLI/daemon/control and Luau execution.
+- QML/Quickshell owns presentation only and never loads plugin source.
+- Python is neither a production dependency nor a plugin language.
 
 ## Normal edit loop
 
 ```bash
 make test
 make check
+./scripts/check.sh
 ```
 
-Use the narrowest relevant test while iterating, then the full repository
-checks before handoff. Quickshell syntax, QML imports, runtime rendering, and
-Wayland input require their own validation once the native tree is present.
+The Make targets run locked workspace Rust tests, formatting, and Clippy.
+`scripts/check.sh` is the broader repository gate for Python-based policy and
+installer tests, shell/config checks, Rust checks, and optional Niri, systemd,
+and QML tools. Python remains test tooling only. Runtime rendering and Wayland
+input require their own validation.
+
+For either Rust crate, the focused contributor gate is:
+
+```bash
+cargo fmt --all -- --check
+cargo check --locked -p weyriva -p weyriva-luau-host
+cargo clippy --locked -p weyriva -p weyriva-luau-host --all-targets -- -D warnings
+cargo test --locked -p weyriva -p weyriva-luau-host
+```
+
+These commands establish source-level Rust evidence only. They do not establish
+packaging, installed service, UI interaction, or XRY acceptance.
+
+The release build consumed by every local install/package path is:
+
+```bash
+cargo build --release --locked -p weyriva -p weyriva-luau-host
+```
+
+For a complete system install, use the zero-choice `./install.sh`; it resolves
+distribution packages, builds both binaries, performs system preflight, and
+then installs. `scripts/install.sh --apply` is the preservation-first
+user-local path for an already built checkout. `packaging/aur/PKGBUILD` builds
+and packages the same two binaries, but the recipe being present locally is
+not an AUR publication claim.
+
+The Rust control plane and API 3 Luau host have local test and package-wiring
+evidence. Do not turn that into claims that the AUR package is published, the
+package has passed a clean install, or the all-Rust revision is deployed on
+XRY.
 
 For a surface change:
 
@@ -64,6 +101,10 @@ For a surface change:
 Noctalia-compatible plugin work uses public documentation, public manifests,
 installed tool output, and self-authored behavioral fixtures. Do not copy
 Noctalia shell implementation source into Weyriva.
+
+Use **Weyriva Plugins** for the product. Use
+`noctalia-v5-luau/1` only for the exact upstream compatibility profile; never
+present `v5` as a Weyriva product version.
 
 Separate:
 

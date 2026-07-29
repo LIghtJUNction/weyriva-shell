@@ -7,17 +7,19 @@ CLI, and repository-owned Quickshell surfaces. The current source exposes the
 core launcher, control center, calendar, notifications, wallpaper, settings,
 terminal, lock, and compositor actions listed below.
 
-Installed input behavior, login, lock, and lifecycle acceptance on XRY remain
+XRY currently previews the independently reviewed UI iteration 3 shell/greeter
+trees and retains the previously deployed control-plane milestone. The current
+all-Rust revision, full input, login, lock, and lifecycle acceptance remain
 pending. A command or QML handler existing in source does not prove the
-installed shell is interactive.
+installed product path is interactive.
 
 ## Fixed default flow
 
 | Intent | Binding | Result |
 |---|---|---|
 | Launch/search | `Mod+Space` | centered Launcher |
-| Notifications | `Mod+N` | top-right Notifications |
-| Control center | `Mod+C` | top-right Control Center |
+| Notifications | `Mod+N` | compact popover at the right bar source |
+| Control center | `Mod+C` | compact popover at the left utility source |
 | Wallpaper | `Mod+W` | centered Wallpaper |
 | Settings | `Mod+Shift+T` | centered Settings |
 | Lock | `Mod+Shift+X` | request native secure lock |
@@ -29,23 +31,24 @@ installed shell is interactive.
 | Move to workspace | `Mod+Shift+1/2/3` | Niri workspace movement |
 | Screenshot | `Print` | Niri screenshot |
 
-These bindings are the shipped zero-configuration default. Structural
-personalization belongs in a maintained fork.
+These bindings are the fixed zero-configuration defaults in repository
+source and local packaging. Their target-machine behavior remains unverified.
+Structural personalization belongs in a maintained fork.
 
 ## Surface workflows
 
 The launcher filters actual desktop entries and executes a selected entry. It
 does not interpolate search text into a shell command.
 
-The control center presents two columns of real controls. The calendar exposes
+The control center presents compact rows of real controls. The calendar exposes
 month navigation and a date grid. Notifications are dismissible and include an
 empty state. Wallpaper selection is visual and updates wallpaper and related
-appearance state. Settings shows explicit values and visibly disables future
-capabilities.
+appearance state. Settings shows only explicit values and implemented actions.
 
-Centered launcher/wallpaper/settings surfaces support focused work. Top-right
-control-center/calendar/notification surfaces remain spatially tied to their
-bar sources.
+The launcher is a centered command palette; wallpaper/settings are centered
+structured workspaces. Control center, calendar, and notifications are compact
+popovers tied respectively to their left, center, and right bar sources on the
+owning screen.
 
 ## Theme and personalization
 
@@ -59,7 +62,7 @@ changes to layout, policy, package set, or workflow belong in a fork.
 
 ## Status and diagnostics
 
-Useful commands include:
+The Rust command surface includes:
 
 ```bash
 weyriva status
@@ -68,6 +71,11 @@ weyriva diagnose --json
 weyriva ipc call weyriva.info
 weyriva ipc call weyriva.niri.outputs
 ```
+
+The plugin subset, startup, shell, session, and diagnosis are implemented in
+`crates/weyriva/`, and local packaging installs the resulting binary. These
+commands are still not evidence of a published package or current XRY
+deployment.
 
 The native QML IPC surface includes a typed `status(): string` method. This can
 show that the live QML IPC target answered. It does not prove pointer input,

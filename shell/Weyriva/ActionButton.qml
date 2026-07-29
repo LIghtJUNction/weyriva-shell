@@ -10,13 +10,16 @@ Button {
     property bool chrome: false
     property bool danger: false
 
-    implicitWidth: compact ? 42 : Math.max(104, contentItem.implicitWidth + 28)
-    implicitHeight: compact ? 42 : subtitle.length > 0 ? 58 : 44
-    leftPadding: compact ? 0 : 14
-    rightPadding: compact ? 0 : 14
+    implicitWidth: compact ? 32 : Math.max(88, contentItem.implicitWidth + 24)
+    implicitHeight: compact ? 32 : subtitle.length > 0 ? 52 : 40
+    leftPadding: compact ? 0 : 12
+    rightPadding: compact ? 0 : 12
     enabled: true
-    scale: down && !ShellState.reducedMotion ? 0.955 : 1
+    scale: down && !ShellState.reducedMotion ? 0.97 : 1
     opacity: enabled ? 1 : 0.48
+    ToolTip.visible: compact && hovered
+    ToolTip.text: text
+    ToolTip.delay: 650
 
     Behavior on scale {
         enabled: !ShellState.reducedMotion
@@ -33,10 +36,10 @@ Button {
             horizontalAlignment: Text.AlignHCenter
             text: control.glyph
             color: control.enabled
-                ? (control.selected ? Theme.ink
+                ? (control.selected ? Theme.onSelection
                     : control.chrome ? Theme.chromeText : Theme.foreground)
                 : (control.chrome ? Theme.chromeMuted : Theme.muted)
-            font.pixelSize: control.compact ? 17 : 16
+            font.pixelSize: control.compact ? 14 : 15
             font.weight: Font.DemiBold
         }
 
@@ -46,7 +49,7 @@ Button {
             Text {
                 text: control.text
                 color: control.enabled
-                    ? (control.selected ? Theme.ink
+                    ? (control.selected ? Theme.onSelection
                         : control.chrome ? Theme.chromeText : Theme.foreground)
                     : (control.chrome ? Theme.chromeMuted : Theme.muted)
                 font.pixelSize: 14
@@ -62,13 +65,13 @@ Button {
     }
 
     background: Rectangle {
-        color: control.down ? (control.danger ? Theme.clay : Theme.carrier)
-             : control.selected ? Theme.carrier
+        color: control.down ? (control.danger ? Theme.clay : Theme.selection)
+             : control.selected ? Theme.selection
              : control.hovered && control.enabled
                  ? (control.chrome ? Theme.separator : Theme.surfaceAlt)
              : "transparent"
-        radius: control.compact ? height / 2 : Theme.radius
-        border.width: control.activeFocus ? 3 : 0
+        radius: control.compact ? 8 : 10
+        border.width: control.activeFocus ? 2 : 0
         border.color: control.chrome ? Theme.chromeText : Theme.foreground
 
         Behavior on color {

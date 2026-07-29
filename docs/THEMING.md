@@ -20,17 +20,18 @@ The identity anchors are:
 |---|---|
 | Ink / foreground | `#141413` |
 | Ivory / surface | `#FAF9F5` |
-| Cactus / carrier | `#BCD1CA` |
+| Cactus / brand field | `#BCD1CA` |
 | Clay / attention | `#D97757` |
 
 Dark mode is designed separately rather than mechanically inverted. Both modes
 retain readable foregrounds, explicit focus, recognizable cactus identity, and
 safe greeter/lock contrast.
 
-Runtime components consume shared semantic roles such as background, surface,
-alternate surface, foreground, muted, carrier, separator, focus, selected,
-pressed, disabled, and error. New controls must not invent independent local
-palettes.
+Functional components consume shared semantic roles such as background,
+surface, alternate surface, foreground, muted, separator, accent, selected,
+pressed, disabled, and error. Dark values are designed explicitly rather than
+falling back to light brand literals. New controls must not invent independent
+local palettes.
 
 ## Flat visual rule
 
@@ -38,12 +39,13 @@ Theme surfaces use opaque, flat color. QML gradients, glossy highlights,
 decorative glass, and stock-card shadow stacks are outside the visual system.
 Depth comes from composition, spacing, boundaries, and restrained contrast.
 
-Irregular carriers and hand-drawn marks may add brand character without
-changing control geometry or input behavior.
+Irregular carriers and hand-drawn marks are reserved for backgrounds, brand
+moments, greeter/lock composition, and genuine empty states. They do not wrap
+functional panels or change control geometry and input behavior.
 
 ## Wallpaper selection
 
-The shipped wallpaper route presents explicit visual choices. A selection must:
+The source wallpaper route presents explicit visual choices. A selection must:
 
 1. update the active wallpaper path;
 2. update the related light/dark appearance state when the choice defines it;
@@ -64,7 +66,9 @@ produce a blank shell or prevent lock coverage.
 
 ## Greeter and lock
 
-Greeter and lock use the same cactus/ivory/ink visual family as the desktop.
+Greeter and lock use the same cactus/ivory/ink brand family as the desktop
+environment. The lock credential region still consumes semantic surface and
+foreground roles so dark presentation remains legible.
 The greeter reads only system-visible resources before authentication. The lock
 may use authenticated user appearance, but secure coverage and legibility take
 priority over theme continuity.

@@ -2,10 +2,11 @@
 
 ## Current status
 
-The repository contains immediate button press feedback, source-specific route
-motion, and reduced-motion branches in the QtQuick source. Static tests cover
-their behavior-bearing structure. Interruption, input behavior, and frame
-pacing remain unverified on XRY.
+The repository contains immediate button press feedback, per-screen route
+ownership, retained presentation routes, source-specific motion, and
+reduced-motion branches in the QtQuick source. Static tests cover their
+behavior-bearing structure. XRY has an iteration 3 UI preview, but
+interruption, input behavior, and frame pacing remain unaccepted.
 
 Motion never proves that an action completed, and it must never delay secure
 lock acquisition.
@@ -31,17 +32,26 @@ grab offset. Momentum is used only when supplied by the gesture.
 | Launcher | centered materialization; centered dismissal |
 | Wallpaper | centered materialization; centered dismissal |
 | Settings | centered materialization; centered dismissal |
-| Control center | top-right/bar source; reverse to the same source |
-| Calendar | clock source at top-right; reverse to the same source |
-| Notifications | notification/bar source at top-right; reverse to it |
+| Control center | left utility source on the centered bar; reverse to it |
+| Calendar | clock source near the center of the bar; reverse to it |
+| Notifications | right notification source; reverse to it |
 | Greeter and lock | restrained state cross-fade; no exposed desktop frame |
 
-Opening one route while another is visible retargets from current opacity,
-scale, and position. It must not snap to a hidden initial value before moving.
+The logical route may clear immediately, but the last presentation route is
+retained through exit so geometry and transform origin remain tied to the
+opening control. Opening the next route updates presentation state before
+activation. A utility-to-utility switch uses current-value smoothing for
+position and height; it must not jump to a hidden initial or final value before
+moving. Reduced motion disables this travel and uses a short content fade.
+
+Routes are owned by their source screen. IPC without a pointer source uses the
+deterministic primary screen; it does not activate the same route on every
+output.
 
 ## Component response
 
-- Buttons and tiles compress or change color while pressed, before release.
+- Buttons and compact rows compress or change color while pressed, before
+  release.
 - Focus appearance is stable and not animated away.
 - Selection transitions retain an explicit selected state.
 - Notification dismissal is visible and does not steal unrelated focus.

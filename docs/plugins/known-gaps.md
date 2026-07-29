@@ -6,6 +6,7 @@ Weyriva conformance test.
 
 ## v5 lifecycle
 
+- the implemented slice accepts only one API 3 launcher-provider entry;
 - complete entry load order across six kinds;
 - teardown ordering across reload, disable, uninstall, and shutdown;
 - exact callback time budgets;
@@ -26,6 +27,8 @@ Weyriva conformance test.
 
 ## v5 sources and dependencies
 
+- custom git sources, implicit local drop-ins, and historical
+  `[[plugin.release]]` selection;
 - interrupted update recovery;
 - conflicting files or dirty source directories;
 - missing or invalid historic revisions;
@@ -56,9 +59,12 @@ Weyriva conformance test.
 ## Product-level gaps
 
 - source/catalog UX has not passed accessibility acceptance;
-- no compatible v5 or v4 host is yet verified without Noctalia installed;
+- the API 3 launcher host is verified locally without Noctalia installed, but
+  the other five v5 entry kinds and all v4 entry kinds remain unverified;
 - no representative compatibility fixture is verified on XRY;
-- packaging does not yet prove the independent hosts are the installed runtime.
+- no clean package install yet proves the package-wired Rust core and host are
+  the active installed runtime;
+- the current all-Rust cutover is not deployed or verified on XRY.
 
 Unknowns remain visible here until a probe, fixture, implementation, and review
 close them. They must not be converted into assumed behavior.

@@ -3,11 +3,11 @@
 ## Current status
 
 Weyriva has an independent QtQuick shell, shared theme/state primitives, and
-Weyriva-owned desktop, greeter, and lock QML in the repository. The current
-visual iteration exists in source and has behavior-bearing static tests. Source
-presence is not runtime acceptance: pointer input, keyboard navigation, secure
-lock behavior, and installed lifecycle behavior have not yet been accepted on
-XRY.
+Weyriva-owned desktop, greeter, and lock QML in the repository. UI iteration 3
+has independent source review, behavior-bearing tests, and an XRY preview of
+the shell/greeter trees. That preview is not full input, lock, lifecycle, or
+current all-Rust control-plane acceptance; XRY retains only the previously
+deployed control-plane milestone.
 
 The source supports light and dark presentation. It does **not** currently
 implement dynamic palette extraction from wallpaper pixels. Documents and UI
@@ -18,9 +18,11 @@ must not imply otherwise.
 Weyriva combines two separate design responsibilities:
 
 - the Anthropic-inspired brand layer provides flat editorial color, irregular
-  carriers, rounded hand-drawn marks, and deliberate asymmetry;
+  composition, and rounded hand-drawn marks only in environmental art, brand
+  moments, greeter/lock composition, and genuine empty states;
 - the Apple-inspired behavior layer provides restrained hierarchy, immediate
-  feedback, spatial continuity, focus clarity, and interruptible motion.
+  feedback, source-screen ownership, focus clarity, and source-specific
+  interruptible motion.
 
 These are original project-owned implementations, not copied assets,
 affiliations, or runtime dependencies.
@@ -33,12 +35,13 @@ The primary visual grammar is:
 - ivory `#FAF9F5` as the paper/carrier color;
 - ink `#141413` as the primary mark and text color;
 - flat, opaque fills;
-- one irregular carrier or deliberately asymmetric composition;
+- at most one irregular brand carrier or deliberately asymmetric composition;
 - rounded, slightly uneven linework with generous negative space.
 
 The existing flat cactus artwork is the reference. Avoid gradients, gloss,
 glass-like decoration, photographic lighting, generic stock cards, perfect
-geometric repetition, and dense cards nested inside cards.
+geometric repetition, dense cards nested inside cards, and a universal carrier
+around functional panels.
 
 Supporting colors may include clay `#D97757`, heather `#CBCADB`, oat `#E3DACC`,
 olive `#788C5D`, sky `#6A9BCC`, fig `#C46686`, and coral `#EBCECE`. Components
@@ -52,33 +55,37 @@ Interactive UI follows these invariants:
 - focus remains visibly distinct from hover and selection;
 - entry and exit use the same source-anchored path;
 - interrupted motion continues from its current visible value;
+- each route belongs to exactly the screen whose control opened it;
 - hierarchy is expressed with spacing, type, and restrained surface contrast;
 - reduced motion uses a cross-fade or static alternative;
 - no enabled control is decorative or actionless.
 
 ## Surface architecture
 
-Routes intentionally use two spatial families:
+Routes intentionally use three spatial families:
 
-| Family | Routes | Placement |
+| Family | Routes | Placement and structure |
 |---|---|---|
-| Focused work | launcher, wallpaper, settings | centered |
-| Glanceable state | control center, calendar, notifications | top-right |
+| Command palette | launcher | centered search plus dense result rows |
+| Utility popovers | control center, calendar, notifications | compact, top-anchored to distinct controls on the centered bar |
+| Structured workspaces | wallpaper, settings | centered navigation/content regions |
 
-Focused surfaces prioritize browsing, selection, and deliberate changes.
-Glanceable surfaces remain close to their bar triggers and dismiss along the
-same path from which they entered.
+Control center aligns to the bar's left utility source, calendar to the clock
+near the center, and notifications to the right source. Each owning screen has
+at most one active/focused host. Utility popovers retain their presentation
+route while closing, so they dismiss toward the same trigger from which they
+entered. Switching between them retargets from current position and size.
 
 The required behavior of each route is:
 
 - Launcher filters real desktop entries and executes the selected entry.
-- Control center uses a two-column layout of real controls with visible state.
+- Control center uses compact rows of real controls with visible state.
 - Calendar provides previous/next month actions and a navigable date grid.
 - Notifications allow dismissal and expose an explicit empty state.
 - Wallpaper presents visual choices and updates the selected path and related
   appearance state.
-- Settings exposes explicit values and state-changing controls; future or
-  unavailable functions are visibly disabled.
+- Settings exposes only explicit values and implemented state-changing
+  controls. Future capabilities do not appear as dead rows.
 - Greeter and lock share the same visual family while retaining separate
   authentication and security responsibilities.
 
@@ -102,10 +109,10 @@ Use the platform sans-serif stack. Display text is compact and confident; body
 text remains readable at increased scale; monospace is reserved for commands,
 paths, identifiers, and diagnostics.
 
-Spacing follows a compact four-pixel-derived rhythm. Large carriers may use
-generous rounded or irregular silhouettes, while controls use a small,
-consistent radius set. Deliberate asymmetry belongs in composition and artwork,
-not in unpredictable control alignment.
+Spacing follows a compact four-pixel-derived rhythm. Functional surfaces use a
+small, consistent radius set and semantic boundaries. Irregular silhouettes
+belong to brand composition and artwork, not panel geometry or unpredictable
+control alignment.
 
 ## Artwork boundary
 

@@ -7,8 +7,8 @@ Button {
     required property bool darkAppearance
     property bool selected: ShellState.wallpaper === imageSource
 
-    implicitHeight: 220
-    scale: down && !ShellState.reducedMotion ? 0.975 : 1
+    implicitHeight: 210
+    scale: down && !ShellState.reducedMotion ? 0.985 : 1
 
     Behavior on scale {
         enabled: !ShellState.reducedMotion
@@ -20,7 +20,7 @@ Button {
     contentItem: Item {
         Image {
             anchors.fill: parent
-            anchors.margins: 6
+            anchors.margins: 3
             source: control.imageSource
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
@@ -31,15 +31,16 @@ Button {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: 12
-            height: 42
-            radius: 15
-            color: control.darkAppearance ? Theme.ink : Theme.ivory
+            anchors.leftMargin: 3
+            anchors.rightMargin: 3
+            anchors.bottomMargin: 3
+            height: 38
+            color: Theme.surface
 
             Text {
                 anchors.centerIn: parent
                 text: control.text
-                color: control.darkAppearance ? Theme.ivory : Theme.ink
+                color: Theme.foreground
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
             }
@@ -47,9 +48,9 @@ Button {
     }
 
     background: Rectangle {
-        color: Theme.paper
-        radius: 28
-        border.width: control.activeFocus || control.selected ? 4 : 1
-        border.color: control.selected ? Theme.ink : Theme.separator
+        color: Theme.surfaceAlt
+        radius: 12
+        border.width: control.activeFocus || control.selected ? 2 : 1
+        border.color: control.selected ? Theme.foreground : Theme.separator
     }
 }

@@ -16,6 +16,51 @@ declare -A WEYRIVA_DESIRED=()
 
 log() { printf '%s\n' "$*"; }
 
+fail_install() {
+    printf 'weyriva user install: %s\n' "$*" >&2
+    exit 1
+}
+
+verify_elf() {
+    local executable=$1
+    local magic
+    [[ -f $executable && ! -L $executable && -x $executable ]] ||
+        fail_install "required release executable is unavailable or unsafe: $executable"
+    magic=$(od -An -tx1 -N4 "$executable" | tr -d '[:space:]')
+    [[ $magic == 7f454c46 ]] ||
+        fail_install "release executable is not ELF: $executable"
+}
+
+verify_release_binaries() {
+    verify_elf "$WEYRIVA_ROOT/target/release/weyriva"
+    verify_elf "$WEYRIVA_ROOT/target/release/weyriva-luau-host"
+}
+
+require_rust_1_88() {
+    command -v cargo >/dev/null 2>&1 || fail_install 'cargo is required'
+    command -v rustc >/dev/null 2>&1 || fail_install 'rustc is required'
+    local version major minor_patch minor
+    version=$(rustc --version | awk '{ print $2 }')
+    major=${version%%.*}
+    minor_patch=${version#*.}
+    minor=${minor_patch%%.*}
+    [[ $major =~ ^[0-9]+$ && $minor =~ ^[0-9]+$ ]] ||
+        fail_install "cannot parse rustc version: $version"
+    ((major > 1 || major == 1 && minor >= 88)) ||
+        fail_install "rustc 1.88 or newer is required; found $version"
+}
+
+build_release_binaries() {
+    require_rust_1_88
+    cargo build \
+        --manifest-path "$WEYRIVA_ROOT/Cargo.toml" \
+        --release \
+        --locked \
+        -p weyriva \
+        -p weyriva-luau-host
+    verify_release_binaries
+}
+
 parse_install_flags() {
     while (($#)); do
         case "$1" in

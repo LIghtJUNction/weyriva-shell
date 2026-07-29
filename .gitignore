@@ -9,6 +9,7 @@ dist/
 *.egg-info/
 *.tmp
 *.log
+target/
 packaging/aur/*.pkg.tar.*
 packaging/aur/src/
 packaging/aur/pkg/

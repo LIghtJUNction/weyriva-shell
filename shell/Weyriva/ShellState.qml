@@ -6,6 +6,8 @@ QtObject {
     signal requestLock()
 
     property string route: ""
+    property string presentationRoute: ""
+    property var routeScreen: null
     property date now: new Date()
     property bool dark: false
     property bool reducedMotion: false
@@ -13,13 +15,30 @@ QtObject {
     property bool barVisible: true
     property string wallpaper: "/usr/share/weyriva/wallpapers/light/weyriva-cactus.png"
 
-    function toggleRoute(nextRoute) {
-        route = route === nextRoute ? "" : nextRoute
+    function openRoute(nextRoute, sourceScreen) {
+        if (!sourceScreen)
+            return
+        presentationRoute = nextRoute
+        routeScreen = sourceScreen
+        route = nextRoute
+    }
+
+    function toggleRoute(nextRoute, sourceScreen) {
+        if (route === nextRoute && routeScreen === sourceScreen) {
+            closeRoute()
+            return
+        }
+        openRoute(nextRoute, sourceScreen)
+    }
+
+    function closeRoute() {
+        route = ""
+        routeScreen = null
     }
 
     function launch(command) {
         Quickshell.execDetached(command)
-        route = ""
+        closeRoute()
     }
 
     function setDark(enabled) {

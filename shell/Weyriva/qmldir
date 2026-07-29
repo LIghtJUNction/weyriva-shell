@@ -2,5 +2,16 @@ singleton Theme 1.0 Theme.qml
 singleton ShellState 1.0 ShellState.qml
 ActionButton 1.0 ActionButton.qml
 BrandMark 1.0 BrandMark.qml
+CalendarSurface 1.0 CalendarSurface.qml
+ControlCenterSurface 1.0 ControlCenterSurface.qml
+LauncherSurface 1.0 LauncherSurface.qml
+LockSurface 1.0 LockSurface.qml
+NotificationsSurface 1.0 NotificationsSurface.qml
+PluginLauncherBridge 1.0 PluginLauncherBridge.qml
+SettingsSurface 1.0 SettingsSurface.qml
+SurfaceHeader 1.0 SurfaceHeader.qml
 SurfacePanel 1.0 SurfacePanel.qml
+TopBar 1.0 TopBar.qml
+UtilityRow 1.0 UtilityRow.qml
 WallpaperPreview 1.0 WallpaperPreview.qml
+WallpaperSurface 1.0 WallpaperSurface.qml

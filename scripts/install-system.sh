@@ -19,8 +19,10 @@ fi
 command -v systemctl >/dev/null 2>&1 || fail 'systemd is required'
 command -v getent >/dev/null 2>&1 || fail 'getent is required'
 command -v runuser >/dev/null 2>&1 || fail 'runuser is required'
+command -v od >/dev/null 2>&1 || fail 'od is required'
+command -v stat >/dev/null 2>&1 || fail 'stat is required'
 [[ -x /usr/bin/env ]] || fail '/usr/bin/env is required for the isolated greeter environment'
-for command_name in niri niri-session quickshell cage foot; do
+for command_name in niri niri-session quickshell cage foot wl-copy notify-send; do
     command -v "$command_name" >/dev/null 2>&1 ||
         fail "required command is unavailable: $command_name"
 done
@@ -53,8 +55,65 @@ awk '
 ' /etc/pam.d/greetd ||
     fail 'the greetd PAM stack must contain an active session rule or include'
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-[[ -f $ROOT/bin/weyriva && -f $ROOT/config/greetd/config.toml ]] ||
+[[ -f $ROOT/target/release/weyriva &&
+    ! -L $ROOT/target/release/weyriva &&
+    -x $ROOT/target/release/weyriva &&
+    -f $ROOT/target/release/weyriva-luau-host &&
+    ! -L $ROOT/target/release/weyriva-luau-host &&
+    -x $ROOT/target/release/weyriva-luau-host &&
+    -f $ROOT/config/greetd/config.toml ]] ||
     fail "incomplete Weyriva checkout: $ROOT"
+
+verify_elf() {
+    local executable=$1
+    local magic
+    magic=$(od -An -tx1 -N4 "$executable" | tr -d '[:space:]')
+    [[ $magic == 7f454c46 ]] ||
+        fail "release executable is not ELF: $executable"
+}
+
+verify_cli_help() {
+    local cli=$1
+    shift
+    "$cli" "$@" --help >/dev/null 2>&1 ||
+        fail "Rust CLI command surface is unavailable: weyriva $*"
+}
+
+weyriva_cli="$ROOT/target/release/weyriva"
+plugin_host="$ROOT/target/release/weyriva-luau-host"
+verify_elf "$weyriva_cli"
+verify_elf "$plugin_host"
+verify_cli_help "$weyriva_cli"
+verify_cli_help "$weyriva_cli" daemon
+verify_cli_help "$weyriva_cli" status
+verify_cli_help "$weyriva_cli" diagnose
+verify_cli_help "$weyriva_cli" startup
+verify_cli_help "$weyriva_cli" startup ensure
+verify_cli_help "$weyriva_cli" ipc
+verify_cli_help "$weyriva_cli" ipc call
+verify_cli_help "$weyriva_cli" shell
+verify_cli_help "$weyriva_cli" shell run
+verify_cli_help "$weyriva_cli" shell reconcile-lock
+verify_cli_help "$weyriva_cli" shell route
+verify_cli_help "$weyriva_cli" shell lock
+verify_cli_help "$weyriva_cli" session
+verify_cli_help "$weyriva_cli" session start
+verify_cli_help "$weyriva_cli" plugin
+verify_cli_help "$weyriva_cli" plugin source
+verify_cli_help "$weyriva_cli" plugin source list
+verify_cli_help "$weyriva_cli" plugin source add
+verify_cli_help "$weyriva_cli" plugin source remove
+verify_cli_help "$weyriva_cli" plugin install
+verify_cli_help "$weyriva_cli" plugin status
+verify_cli_help "$weyriva_cli" plugin enable
+verify_cli_help "$weyriva_cli" plugin disable
+verify_cli_help "$weyriva_cli" plugin reload
+verify_cli_help "$weyriva_cli" plugin uninstall
+verify_cli_help "$weyriva_cli" plugin query
+verify_cli_help "$weyriva_cli" plugin activate
+host_usage=$("$plugin_host" --help 2>&1 || true)
+[[ $host_usage == *"usage: weyriva-luau-host --plugin-dir"* ]] ||
+    fail 'Rust Luau host command surface is unavailable'
 
 target_home=$(getent passwd "$TARGET_USER" | cut -d: -f6)
 [[ $target_home == /* && -d $target_home && ! -L $target_home ]] ||
@@ -75,7 +134,7 @@ if [[ -f $user_niri_config ]] &&
 fi
 unit_verify_dir=$(mktemp -d /tmp/weyriva-systemd-verify.XXXXXX)
 chmod 0755 "$unit_verify_dir"
-install -m 0755 "$ROOT/bin/weyriva" "$unit_verify_dir/weyriva"
+install -m 0755 "$weyriva_cli" "$unit_verify_dir/weyriva"
 for source in "$ROOT"/systemd/*.service; do
     sed "s#/usr/bin/weyriva#$unit_verify_dir/weyriva#g" \
         "$source" >"$unit_verify_dir/${source##*/}"
@@ -133,7 +192,11 @@ plan_file() {
     install_modes+=("${3:-0644}")
 }
 
-plan_file "$ROOT/bin/weyriva" /usr/bin/weyriva 0755
+plan_file "$weyriva_cli" /usr/bin/weyriva 0755
+plan_file \
+    "$plugin_host" \
+    /usr/bin/weyriva-luau-host \
+    0755
 plan_file "$ROOT/config/niri/config.kdl" /usr/share/weyriva/config/niri/config.kdl
 for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/config/weyriva"; do
     while IFS= read -r -d '' source; do
@@ -180,6 +243,12 @@ fi
 validate_safe_parent "$BACKUP_ROOT/placeholder"
 [[ ! -e $BACKUP_ROOT && ! -L $BACKUP_ROOT ]] ||
     fail "system backup destination already exists: $BACKUP_ROOT"
+legacy_runtime=/usr/lib/weyriva/weyriva_plugins_v5.py
+validate_safe_parent "$legacy_runtime"
+if [[ -e $legacy_runtime || -L $legacy_runtime ]]; then
+    [[ -L $legacy_runtime || -f $legacy_runtime ]] ||
+        fail "legacy runtime path is not a regular file or symlink: $legacy_runtime"
+fi
 
 wants_dir=/usr/lib/systemd/user/niri.service.wants
 [[ -f /usr/lib/systemd/user/niri.service && ! -L /usr/lib/systemd/user/niri.service ]] ||
@@ -193,6 +262,33 @@ for unit in weyriva-ipc.service weyriva-shell.service; do
     [[ ! -e $link && ! -L $link ]] ||
         fail "refusing to replace unexpected niri wants entry: $link"
 done
+
+user_runtime_dir="/run/user/$target_uid"
+user_bus="$user_runtime_dir/bus"
+user_manager_active=false
+active_ipc=false
+active_shell=false
+if [[ -d $user_runtime_dir && ! -L $user_runtime_dir &&
+    $(stat -c %u "$user_runtime_dir") == "$target_uid" &&
+    -S $user_bus && ! -L $user_bus &&
+    $(stat -c %u "$user_bus") == "$target_uid" ]]; then
+    user_systemctl=(
+        runuser -u "$TARGET_USER" --
+        env HOME="$target_home"
+        XDG_RUNTIME_DIR="$user_runtime_dir"
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$user_bus"
+        systemctl --user
+    )
+    if "${user_systemctl[@]}" show-environment >/dev/null 2>&1; then
+        user_manager_active=true
+        if "${user_systemctl[@]}" is-active --quiet weyriva-ipc.service; then
+            active_ipc=true
+        fi
+        if "${user_systemctl[@]}" is-active --quiet weyriva-shell.service; then
+            active_shell=true
+        fi
+    fi
+fi
 
 if [[ $PREFLIGHT == true ]]; then
     printf 'System install preflight passed for %s; no system files were changed.\n' \
@@ -229,6 +325,13 @@ for index in "${!install_sources[@]}"; do
         "${install_modes[$index]}"
 done
 
+if [[ -e $legacy_runtime || -L $legacy_runtime ]]; then
+    legacy_backup="$BACKUP_ROOT/${legacy_runtime#/}"
+    install -d -m 0700 "$(dirname "$legacy_backup")"
+    cp -a --no-dereference -- "$legacy_runtime" "$legacy_backup"
+    rm -f -- "$legacy_runtime"
+fi
+
 install -d -m 0755 "$wants_dir"
 for unit in weyriva-ipc.service weyriva-shell.service; do
     link="$wants_dir/$unit"
@@ -242,14 +345,23 @@ done
 
 WEYRIVA_STARTUP_TIMESTAMP="$INSTALL_TIMESTAMP" \
     /usr/bin/weyriva startup ensure --user "$TARGET_USER"
-user_runtime_dir="/run/user/$target_uid"
-user_bus="$user_runtime_dir/bus"
-if [[ -d $user_runtime_dir && ! -L $user_runtime_dir &&
-    -S $user_bus && ! -L $user_bus ]]; then
-    if ! runuser -u "$TARGET_USER" -- \
-        env XDG_RUNTIME_DIR="$user_runtime_dir" \
-        systemctl --user daemon-reload; then
+if [[ $user_manager_active == true ]]; then
+    if ! "${user_systemctl[@]}" daemon-reload; then
         fail "failed to reload the active user manager for $TARGET_USER"
+    fi
+    if [[ $active_shell == true ]]; then
+        "${user_systemctl[@]}" stop weyriva-shell.service ||
+            fail 'failed to stop the previously active Weyriva shell'
+    fi
+    if [[ $active_ipc == true ]]; then
+        "${user_systemctl[@]}" stop weyriva-ipc.service ||
+            fail 'failed to stop the previously active Weyriva IPC daemon'
+        "${user_systemctl[@]}" start weyriva-ipc.service ||
+            fail 'failed to start the migrated Weyriva IPC daemon'
+    fi
+    if [[ $active_shell == true ]]; then
+        "${user_systemctl[@]}" start weyriva-shell.service ||
+            fail 'failed to restart the Weyriva shell'
     fi
 fi
 printf 'System files installed for %s; greeter uid %s gid %s; greetd enabled for next boot and not restarted.\n' \

@@ -1,0 +1,17 @@
+api = 3
+author = "weyriva"
+id = "launcher-host-fixture"
+name = "Weyriva launcher host fixture"
+version = "1.0.0"
+
+[[launcher_provider]]
+id = "catalog"
+entry = "launcher.luau"
+prefix = "w"
+glyph = "W"
+include_in_global_search = true
+
+[[setting]]
+key = "accent"
+type = "string"
+default = "cactus"

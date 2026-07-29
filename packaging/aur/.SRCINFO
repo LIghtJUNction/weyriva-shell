@@ -3,10 +3,12 @@ pkgbase = weyriva-shell-git
 	pkgver = 0.1.0.r0.g0000000
 	pkgrel = 1
 	url = https://github.com/LIghtJUNction/weyriva-shell
-	arch = any
+	arch = x86_64
+	arch = aarch64
 	license = MIT
 	makedepends = git
-	depends = python
+	makedepends = rust>=1.88
+	makedepends = cmake
 	depends = systemd>=254
 	depends = niri
 	depends = greetd
@@ -14,6 +16,8 @@ pkgbase = weyriva-shell-git
 	depends = cage
 	depends = foot
 	depends = noto-fonts
+	depends = wl-clipboard
+	depends = libnotify
 	provides = weyriva-shell
 	conflicts = weyriva-shell
 	source = git+https://github.com/LIghtJUNction/weyriva-shell.git

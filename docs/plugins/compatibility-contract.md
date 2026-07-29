@@ -1,22 +1,27 @@
 # Weyriva plugin compatibility contract
 
 Version: `1`
-Status: specification implemented; runtime conformance in progress
+Status: Rust API 3 launcher-provider slice passed locally and is package-wired;
+installed-system and XRY verification pending
 
 This contract defines what Weyriva means by compatibility with public Noctalia
 plugin formats. Weyriva implements the behavior in project-owned hosts. It does
 not embed, launch, or delegate desktop ownership to a Noctalia shell.
+The product is **Weyriva Plugins**; `v5` appears only inside upstream
+compatibility terminology and profile identifiers.
 
 ## Profiles
 
 | Profile | Package format | Execution environment | Status |
 |---|---|---|---|
-| `noctalia-v5-luau/1` | `plugin.toml` + `.luau` | isolated trusted Luau VMs in Weyriva | In progress |
+| `noctalia-v5-luau/1` | `plugin.toml` + `.luau` | Rust `weyriva-luau-host` with isolated trusted Luau VMs | API 3 single-launcher-provider slice passed locally and package-wired; target verification pending |
 | `noctalia-v4-qml/1` | `manifest.json` + QML | isolated Quickshell compatibility host | Planned |
-| `weyriva-exec/1` | JSON + executable | bounded local JSON daemon | Implemented locally |
 
 A host advertises an exact profile and supported API range. It must reject a
 package outside that range rather than running it partially.
+
+Python is repository test tooling only, not a production runtime dependency or
+plugin language.
 
 ## Definition of compatibility
 
@@ -57,8 +62,8 @@ ordering, and undocumented recovery behavior are implementation details.
 
 ## Trust and isolation
 
-Compatible Luau, QML, and executable plugins are trusted user code, not a
-security sandbox. Weyriva still isolates failure domains:
+Compatible Luau and QML plugins are trusted user code, not a security sandbox.
+Weyriva still isolates failure domains:
 
 - one bad entry must not freeze the core UI;
 - time and output are bounded where the public ABI permits;
@@ -72,7 +77,8 @@ dependencies, and compatibility result before enablement.
 ## Versioning
 
 The contract version describes Weyriva semantics. The upstream `plugin_api`
-number describes capabilities required by one v5 plugin. They are separate.
+number describes capabilities required by a plugin in the
+`noctalia-v5-luau/1` profile. Neither number is a Weyriva product version.
 
 A compatibility change requires:
 

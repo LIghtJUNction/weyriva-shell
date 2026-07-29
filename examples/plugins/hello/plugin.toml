@@ -1,0 +1,18 @@
+id = "weyriva/hello"
+name = "Hello"
+version = "1.0.0"
+plugin_api = 3
+author = "Weyriva"
+description = "Minimal native Luau launcher provider example."
+
+[[launcher_provider]]
+id = "hello"
+entry = "main.luau"
+prefix = "hello"
+glyph = "W"
+include_in_global_search = true
+debounce_ms = 0
+
+[[launcher_provider.category]]
+label = "Examples"
+glyph = "W"

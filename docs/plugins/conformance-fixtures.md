@@ -3,6 +3,10 @@
 All fixtures are authored by Weyriva. They exercise public observable behavior
 without copying upstream shell implementation or plugin source.
 
+Only `v5-launcher-api3` is currently passed locally. Every other fixture below
+is a planned acceptance case and remains not run unless its section later
+records a different status.
+
 Each fixture records:
 
 - profile and requested API;
@@ -14,6 +18,27 @@ Each fixture records:
 - local/runtime/system/XRY evidence level.
 
 ## v5 fixtures
+
+### `v5-launcher-api3`
+
+Status: passed locally.
+
+The source lives under `tests/fixtures/plugins/v5-launcher-api3`. It proves one
+API 3 launcher provider can load in the independent Rust host, query and
+activate results, handle IPC and shutdown, use config/JSON/relative files and
+process-lifetime state, and emit bounded clipboard/notification/query actions.
+Negative entries exercise traversal and symlink reads, invalid/oversized
+models and actions, response/result limits, memory exhaustion, infinite loops,
+unsupported namespaces, malformed methods, and protocol recovery.
+
+Control-plane fixtures under `tests/fixtures/plugin-sources` prove
+pinned/ordered source resolution, immutable atomic install, explicit lifecycle,
+failure state, exit evidence, safe action argv, and daemon/CLI round trips. A
+separate live-source probe installed official `noctalia/kaomoji` 1.0.1 from commit
+`4b03f0a5e3b701c5a3ade87d35ed62c1699f93c6` and exercised its `kao` launcher
+prefix.
+
+This status applies only to API 3 with one launcher-provider entry.
 
 ### `v5-all-entries-api3`
 

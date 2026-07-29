@@ -15,12 +15,12 @@ ShellRoot {
         Component.onCompleted: username.forceActiveFocus()
 
         Canvas {
-            visible: parent.width > 900
+            visible: parent.width > 860
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Math.max(76, parent.width * 0.09)
-            width: Math.min(360, parent.width * 0.30)
-            height: width * 0.78
+            anchors.leftMargin: Math.max(72, parent.width * 0.10)
+            width: Math.min(300, parent.width * 0.27)
+            height: width * 0.76
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
             onPaint: {
@@ -28,171 +28,158 @@ ShellRoot {
                 context.clearRect(0, 0, width, height)
                 context.strokeStyle = "#141413"
                 context.fillStyle = "#141413"
-                context.lineWidth = Math.max(11, width * 0.042)
+                context.lineWidth = Math.max(10, width * 0.042)
                 context.lineCap = "round"
                 context.lineJoin = "round"
 
+                context.fillStyle = "#FAF9F5"
                 context.beginPath()
-                context.moveTo(width * 0.12, height * 0.68)
+                context.moveTo(width * 0.13, height * 0.16)
                 context.bezierCurveTo(
-                    width * 0.26, height * 0.12,
-                    width * 0.56, height * 0.87,
-                    width * 0.84, height * 0.25
+                    width * 0.31, height * 0.01,
+                    width * 0.78, height * 0.07,
+                    width * 0.89, height * 0.28
+                )
+                context.bezierCurveTo(
+                    width * 0.98, height * 0.56,
+                    width * 0.77, height * 0.91,
+                    width * 0.47, height * 0.94
+                )
+                context.bezierCurveTo(
+                    width * 0.20, height * 0.98,
+                    width * 0.03, height * 0.72,
+                    width * 0.09, height * 0.45
+                )
+                context.closePath()
+                context.fill()
+
+                context.fillStyle = "#141413"
+                context.beginPath()
+                context.moveTo(width * 0.10, height * 0.72)
+                context.bezierCurveTo(
+                    width * 0.27, height * 0.12,
+                    width * 0.55, height * 0.84,
+                    width * 0.86, height * 0.24
                 )
                 context.stroke()
 
                 context.beginPath()
-                context.moveTo(width * 0.20, height * 0.82)
+                context.moveTo(width * 0.20, height * 0.84)
                 context.bezierCurveTo(
-                    width * 0.39, height * 0.48,
-                    width * 0.61, height * 0.76,
-                    width * 0.90, height * 0.60
+                    width * 0.40, height * 0.48,
+                    width * 0.63, height * 0.74,
+                    width * 0.91, height * 0.58
                 )
                 context.stroke()
 
-                const dot = Math.max(9, width * 0.03)
-                for (const point of [[0.17, 0.32], [0.83, 0.18], [0.87, 0.77]]) {
+                const dot = Math.max(8, width * 0.03)
+                for (const point of [[0.16, 0.31], [0.84, 0.18], [0.88, 0.76]]) {
                     context.beginPath()
                     context.arc(
-                        width * point[0],
-                        height * point[1],
-                        dot,
-                        0,
-                        Math.PI * 2
+                        width * point[0], height * point[1],
+                        dot, 0, Math.PI * 2
                     )
                     context.fill()
                 }
             }
         }
 
-        Item {
-            id: authCard
+        Rectangle {
+            id: credentialRegion
             anchors.centerIn: parent
-            anchors.horizontalCenterOffset: parent.width > 900
-                ? Math.min(270, parent.width * 0.19) : 0
-            width: Math.min(500, parent.width - 56)
-            height: 438
-
-            Canvas {
-                anchors.fill: parent
-                onWidthChanged: requestPaint()
-                onHeightChanged: requestPaint()
-                onPaint: {
-                    const context = getContext("2d")
-                    context.clearRect(0, 0, width, height)
-                    context.fillStyle = "#FAF9F5"
-                    context.strokeStyle = "#141413"
-                    context.lineWidth = 6
-                    context.lineJoin = "round"
-                    context.beginPath()
-                    context.moveTo(width * 0.08, height * 0.05)
-                    context.bezierCurveTo(
-                        width * 0.30, -2,
-                        width * 0.79, height * 0.01,
-                        width * 0.95, height * 0.12
-                    )
-                    context.bezierCurveTo(
-                        width + 2, height * 0.38,
-                        width * 0.98, height * 0.80,
-                        width * 0.89, height * 0.95
-                    )
-                    context.bezierCurveTo(
-                        width * 0.60, height + 2,
-                        width * 0.18, height * 0.98,
-                        width * 0.06, height * 0.87
-                    )
-                    context.bezierCurveTo(
-                        -2, height * 0.56,
-                        width * 0.01, height * 0.20,
-                        width * 0.08, height * 0.05
-                    )
-                    context.closePath()
-                    context.fill()
-                    context.stroke()
-                }
-            }
+            anchors.horizontalCenterOffset: parent.width > 860
+                ? Math.min(230, parent.width * 0.17) : 0
+            width: Math.min(420, parent.width - 48)
+            height: 360
+            color: "#FAF9F5"
+            radius: 18
+            border.width: 1
+            border.color: "#14141333"
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 50
-                anchors.rightMargin: 50
-                anchors.topMargin: 44
-                anchors.bottomMargin: 42
-                spacing: 14
+                anchors.margins: 32
+                spacing: 9
 
-                Text {
-                    text: "A QUIET PLACE TO BEGIN"
-                    color: "#686761"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    font.letterSpacing: 1.15
-                }
                 Text {
                     text: "Weyriva"
                     color: "#141413"
-                    font.pixelSize: 43
-                    font.bold: true
-                    font.letterSpacing: -1
+                    font.pixelSize: 34
+                    font.weight: Font.Bold
+                    font.letterSpacing: -0.7
                 }
+
+                Item { Layout.preferredHeight: 4 }
+
                 Text {
-                    text: "Sign in to your Niri desktop."
-                    color: "#686761"
-                    font.pixelSize: 14
+                    text: "Username"
+                    color: "#141413"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
                 }
-                Item { Layout.preferredHeight: 5 }
+
                 TextField {
                     id: username
                     Layout.fillWidth: true
-                    implicitHeight: 50
-                    placeholderText: "Username"
+                    implicitHeight: 46
                     color: "#141413"
-                    placeholderTextColor: "#686761"
-                    leftPadding: 18
-                    rightPadding: 18
+                    leftPadding: 14
+                    rightPadding: 14
                     enabled: Greetd.state === GreetdState.Inactive
                     onAccepted: password.forceActiveFocus()
                     background: Rectangle {
                         color: "#F0EEE6"
-                        radius: 17
-                        border.width: username.activeFocus ? 3 : 1
-                        border.color: "#141413"
+                        radius: 10
+                        border.width: username.activeFocus ? 2 : 1
+                        border.color: username.activeFocus
+                            ? "#141413" : "#14141333"
                     }
                 }
+
+                Text {
+                    text: "Password"
+                    color: "#141413"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+
                 TextField {
                     id: password
                     Layout.fillWidth: true
-                    implicitHeight: 50
-                    placeholderText: "Password"
+                    implicitHeight: 46
                     echoMode: TextInput.Password
                     color: "#141413"
-                    placeholderTextColor: "#686761"
-                    leftPadding: 18
-                    rightPadding: 18
+                    leftPadding: 14
+                    rightPadding: 14
                     enabled: Greetd.state === GreetdState.Inactive
-                    background: Rectangle {
-                        color: "#F0EEE6"
-                        radius: 17
-                        border.width: password.activeFocus ? 3 : 1
-                        border.color: "#141413"
-                    }
                     onAccepted: submit()
+
                     function submit() {
                         errorText.text = ""
                         if (Greetd.state === GreetdState.Inactive)
                             Greetd.createSession(username.text)
                     }
+
+                    background: Rectangle {
+                        color: "#F0EEE6"
+                        radius: 10
+                        border.width: password.activeFocus ? 2 : 1
+                        border.color: password.activeFocus
+                            ? "#141413" : "#14141333"
+                    }
                 }
+
                 Button {
                     id: submitButton
                     Layout.fillWidth: true
-                    implicitHeight: 50
+                    implicitHeight: 44
                     text: Greetd.state === GreetdState.Inactive
                         ? "Sign in" : "Authenticating…"
                     enabled: Greetd.available
                         && Greetd.state === GreetdState.Inactive
                         && username.text.length > 0
+                    scale: down ? 0.975 : 1
                     onClicked: password.submit()
-                    scale: down ? 0.965 : 1
 
                     Behavior on scale {
                         NumberAnimation {
@@ -206,21 +193,23 @@ ShellRoot {
                         color: "#141413"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        font.pixelSize: 15
+                        font.pixelSize: 14
                         font.weight: Font.DemiBold
                     }
+
                     background: Rectangle {
                         color: submitButton.down ? "#D97757"
                             : submitButton.hovered ? "#AFC5BE" : "#BCD1CA"
-                        radius: 18
-                        border.width: submitButton.activeFocus ? 3 : 1
+                        radius: 10
+                        border.width: submitButton.activeFocus ? 2 : 1
                         border.color: "#141413"
                     }
                 }
+
                 Text {
                     id: errorText
                     Layout.fillWidth: true
-                    Layout.minimumHeight: 34
+                    Layout.minimumHeight: 28
                     wrapMode: Text.Wrap
                     color: "#D97757"
                     font.pixelSize: 12
@@ -241,8 +230,13 @@ ShellRoot {
             password.clear()
             password.forceActiveFocus()
         }
-        function onError(error) { errorText.text = error }
+        function onError(error) {
+            errorText.text = error
+            password.clear()
+            password.forceActiveFocus()
+        }
         function onReadyToLaunch() {
+            password.clear()
             Greetd.launch(["/usr/bin/weyriva", "session", "start"])
         }
     }

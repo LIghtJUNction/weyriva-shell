@@ -16,15 +16,24 @@ systemd
    └─ Weyriva Greeter
       └─ PAM-authenticated session request over GREETD_SOCK
          └─ niri-session
-            └─ Weyriva Shell
-               ├─ desktop surfaces
-               ├─ native IPC/plugin hosts
-               └─ authenticated lock surface
+            ├─ Weyriva Shell
+            │  ├─ desktop surfaces
+            │  └─ authenticated lock surface
+            ├─ /usr/bin/weyriva
+            │  └─ startup/session/plugin control and IPC
+            └─ /usr/bin/weyriva-luau-host
+               └─ one bounded process per supported entry
 ```
 
-greetd must not become a second branded UI. The exact Weyriva Greeter command
-and service template remain in progress and must be validated against the live
-package before installation.
+The root installer and local AUR recipe install both Rust binaries at these
+paths. Startup, shell, session, diagnosis, and the API 3 launcher host are
+implemented locally; clean installation and lifecycle acceptance remain
+pending.
+
+greetd must not become a second branded UI. XRY currently has the reviewed UI
+iteration 3 shell/greeter preview and retains the previously deployed
+control-plane milestone, not the current all-Rust cutover. That does not
+establish the boot chain, authentication, or desktop/lock lifecycle.
 
 ## greetd boundary
 
@@ -46,7 +55,7 @@ recovery are presented. It must not:
 
 ## Greeter
 
-The planned Weyriva Greeter is a minimal Quickshell surface. It must provide:
+The Weyriva Greeter is a minimal Quickshell surface. It must provide:
 
 - account selection without leaking sensitive account metadata;
 - password input with correct masking, focus, and keyboard submission;
@@ -128,7 +137,8 @@ systemctl --user status weyriva-shell.service --no-pager
 journalctl --user -u weyriva-shell.service -b --no-pager
 ```
 
-Unit names are verified only when the independent runtime packaging lands.
+Repository checks verify the unit definitions; target-machine behavior still
+requires an installed-system test.
 
 ## Status
 
@@ -136,10 +146,11 @@ Unit names are verified only when the independent runtime packaging lands.
 |---|---|
 | greetd/PAM boundary design | Implemented in repository policy; live validation pending |
 | Independent Weyriva Greeter | Source implemented; system acceptance pending |
-| Native desktop startup | Source implemented; runtime acceptance pending |
+| Native desktop startup | QtQuick and Rust startup/shell/session source implemented; runtime acceptance pending |
 | Secure integrated lock | Source implemented; security/system acceptance pending |
 | Suspend/resume/logout | In progress |
 | Crash-loop and locked recovery | Fail-closed repository wiring implemented; system acceptance pending |
-| Cold-boot and XRY acceptance | Planned |
+| XRY UI iteration 3 preview | Present with the prior control-plane milestone; current all-Rust deployment and lifecycle acceptance absent |
+| Cold-boot and full XRY acceptance | Planned |
 
 The lifecycle is verified only after the matrix in [Testing](TESTING.md) passes.

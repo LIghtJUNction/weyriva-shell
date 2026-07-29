@@ -1,0 +1,15 @@
+[package]
+name = "weyriva-luau-host"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+mlua = { version = "=0.12.0", features = ["luau", "vendored", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lints]
+workspace = true

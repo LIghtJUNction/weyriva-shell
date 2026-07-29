@@ -10,9 +10,9 @@ Status meanings are defined in the [README](../README.md).
 
 | Reference | Pin | Purpose | Status |
 |---|---|---|---|
-| Noctalia docs | `b1e6e9b5235995ba6716d1814b4b127714d8f172` | Public v5/v4 behavior and ABI | Reviewed |
-| Official v5 plugins | `d8616f06f707ca6ba99526fb45e0b8fae672259a` | Public manifest corpus | Reviewed |
-| Community v5 plugins | `6cee9bbcc726c29e3c1190ae52c6e6135f6819ce` | Compatibility corpus | Reviewed |
+| Noctalia docs | `a0fcbcafc709836f46e1c23b18ade6947d442e26` | Public v5/v4 behavior and ABI | Reviewed |
+| Official v5 plugins | `4b03f0a5e3b701c5a3ade87d35ed62c1699f93c6` | Public manifest/runtime corpus | Reviewed; Kaomoji probed |
+| Community v5 plugins | `35afaa444de6389164360b1ecadb87c972b32912` | Compatibility corpus | Reviewed |
 | Legacy v4 plugins | `ea21cb63d063075bc0acd72d8b946ce2c5eef00d` | QML compatibility corpus | Reviewed |
 
 Reviewing a reference is not runtime acceptance.
@@ -21,19 +21,19 @@ Reviewing a reference is not runtime acceptance.
 
 | Surface | Target owner | Repository status | Real interaction verified |
 |---|---|---|---|
-| Bar/tray/taskbar | Weyriva | Initial source; in progress | No |
-| Launcher | Weyriva | Initial source; in progress | No |
-| Calendar | Weyriva | Initial source; in progress | No |
-| Control center | Weyriva | Initial source; in progress | No |
-| Notifications/history | Weyriva | Initial source; in progress | No |
+| Bar/tray/taskbar | Weyriva | UI iteration 3 source reviewed; preview only | No |
+| Launcher | Weyriva | UI iteration 3 source reviewed; preview only | No |
+| Calendar | Weyriva | UI iteration 3 source reviewed; preview only | No |
+| Control center | Weyriva | UI iteration 3 source reviewed; preview only | No |
+| Notifications/history | Weyriva | UI iteration 3 source reviewed; preview only | No |
 | Clipboard history | Weyriva | In progress | No |
-| Wallpaper | Weyriva | Initial source; in progress | No |
+| Wallpaper | Weyriva | UI iteration 3 source reviewed; preview only | No |
 | OSD | Weyriva | In progress | No |
-| Settings | Weyriva | Initial source; in progress | No |
+| Settings | Weyriva | UI iteration 3 source reviewed; preview only | No |
 | Screenshots | Weyriva | In progress | No |
 | Desktop widgets | Weyriva | In progress | No |
-| Login | Weyriva Greeter over greetd | Initial source; in progress | No |
-| In-session lock | Weyriva over session-lock protocol | Initial source; in progress | No |
+| Login | Weyriva Greeter over greetd | UI iteration 3 source reviewed; lifecycle unaccepted | No |
+| In-session lock | Weyriva over session-lock protocol | UI iteration 3 source reviewed; security unaccepted | No |
 
 “Visible” will not count as passing. Buttons, dates, fields, scrolling, focus,
 keyboard navigation, disabled states, errors, and completion feedback must all
@@ -48,17 +48,16 @@ be exercised.
 | greetd remains internal broker | In progress | installed config + PAM + boot |
 | Lock fails closed | In progress | locked crash/restart test |
 | Bounded recovery | In progress | injected crash and logs |
-| One-command zero-choice install | Implemented scaffold | clean-machine install |
-| Arch package | In progress | clean `makepkg` and install |
+| One-command zero-choice install | Implemented with both Rust binaries | clean-machine install |
+| Arch package | Local recipe cut over to both Rust binaries | clean `makepkg`, install, and publication |
 | Other distributions | Planned | per-distribution installation evidence |
-| XRY | Planned | exact-revision deployment and acceptance |
+| XRY | UI iteration 3 preview plus prior control-plane milestone | current all-Rust deployment plus complete login/desktop/lock/plugin interaction |
 
 ## Plugin compatibility
 
 | Lane | Status | What is still required |
 |---|---|---|
-| Weyriva legacy executable JSON | Implemented locally | security and installed-runtime regression |
-| Noctalia v5-compatible Luau | In progress | six entry kinds, API levels, lifecycle, state, IPC, UI |
+| Noctalia v5-compatible Luau | Rust API 3 single-launcher-provider slice passed locally and package-wired | clean installed-runtime evidence, remaining five entry kinds, APIs 4–19, full corpus and XRY |
 | Noctalia v4-compatible QML | Planned | isolated host, imports/context, render/input/settings/IPC |
 
 Catalog listing, manifest parsing, or copied files do not satisfy this table.
@@ -69,8 +68,8 @@ See [plugin conformance fixtures](plugins/conformance-fixtures.md).
 | Requirement | Status |
 |---|---|
 | Shared semantic tokens and component states | In progress |
-| Original Anthropic-inspired artwork grammar | Implemented as documentation/assets; runtime integration pending |
-| Immediate and interruptible interaction feedback | In progress |
+| Anthropic-inspired environment/brand/empty-state grammar | Implemented in UI iteration 3 source |
+| Apple-inspired source-owned functional chrome and interruptible motion | Implemented in UI iteration 3 source; runtime acceptance pending |
 | Reduced motion and transparency | In progress |
 | Keyboard-only operation | In progress |
 | Screen-reader semantics | Planned |

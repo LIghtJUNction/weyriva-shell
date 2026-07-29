@@ -6,6 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=libinstall.sh
 source "$SCRIPT_DIR/libinstall.sh"
 parse_install_flags "$@"
+verify_release_binaries
 load_state
 
 CONFIG_HOME=${XDG_CONFIG_HOME:-"$HOME/.config"}
@@ -13,7 +14,11 @@ DATA_HOME=${XDG_DATA_HOME:-"$HOME/.local/share"}
 BIN_HOME="$HOME/.local/bin"
 
 log "Weyriva user installation ($([[ $WEYRIVA_APPLY -eq 1 ]] && echo apply || echo dry-run))"
-install_file "$WEYRIVA_ROOT/bin/weyriva" "$BIN_HOME/weyriva" 0755
+install_file "$WEYRIVA_ROOT/target/release/weyriva" "$BIN_HOME/weyriva" 0755
+install_file \
+    "$WEYRIVA_ROOT/target/release/weyriva-luau-host" \
+    "$BIN_HOME/weyriva-luau-host" \
+    0755
 install_tree "$WEYRIVA_ROOT/config/niri" "$CONFIG_HOME/niri"
 install_tree "$WEYRIVA_ROOT/config/weyriva" "$CONFIG_HOME/weyriva"
 install_tree "$WEYRIVA_ROOT/shell" "$DATA_HOME/weyriva/shell"

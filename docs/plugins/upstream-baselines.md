@@ -9,50 +9,61 @@ Weyriva's compatibility claim.
 Pinned docs commit:
 
 ```text
-b1e6e9b5235995ba6716d1814b4b127714d8f172
+a0fcbcafc709836f46e1c23b18ade6947d442e26
 ```
 
 Primary sources:
 
-- [v5 development overview](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v5/plugins/development/index.mdx)
-- [v5 manifest and settings](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v5/plugins/development/manifest.mdx)
-- [v5 entry scripts](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v5/plugins/development/entries.mdx)
-- [v5 declarative UI](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v5/plugins/development/declarative-ui.mdx)
-- [v5 runtime API](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v5/plugins/development/runtime-api.mdx)
-- [v5 API ledger](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/data/plugin-api.ts)
-- [v5 workflow and sources](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v5/plugins/development/workflow.mdx)
-- [v4 overview](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v4/development/plugins/overview.mdx)
-- [v4 manifest](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v4/development/plugins/manifest.mdx)
-- [v4 Plugin API](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v4/development/plugins/api.mdx)
-- [v4 IPC](https://github.com/noctalia-dev/noctalia-docs/blob/b1e6e9b5235995ba6716d1814b4b127714d8f172/src/content/docs/v4/development/plugins/ipc.mdx)
+- [v5 development overview](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v5/plugins/development/index.mdx)
+- [v5 manifest and settings](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v5/plugins/development/manifest.mdx)
+- [v5 entry scripts](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v5/plugins/development/entries.mdx)
+- [v5 declarative UI](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v5/plugins/development/declarative-ui.mdx)
+- [v5 runtime API](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v5/plugins/development/runtime-api.mdx)
+- [v5 API ledger](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/data/plugin-api.ts)
+- [v5 workflow and sources](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v5/plugins/development/workflow.mdx)
+- [v4 overview](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v4/development/plugins/overview.mdx)
+- [v4 manifest](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v4/development/plugins/manifest.mdx)
+- [v4 Plugin API](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v4/development/plugins/api.mdx)
+- [v4 IPC](https://github.com/noctalia-dev/noctalia-docs/blob/a0fcbcafc709836f46e1c23b18ade6947d442e26/src/content/docs/v4/development/plugins/ipc.mdx)
+
+The corresponding shell runtime pins are:
+
+```text
+main: 2edf8c003cec37b5622a8f6bb9d511b6cfa5cf49 (plugin API 3..19)
+v5.0.0-beta.6: d24fe45e9a798317072547fa5d56950607750e68 (plugin API 3..16)
+```
+
+The runtime API authority is
+[`src/scripting/plugin_api.h`](https://github.com/noctalia-dev/noctalia/blob/2edf8c003cec37b5622a8f6bb9d511b6cfa5cf49/src/scripting/plugin_api.h).
 
 ## Public plugin corpora
 
 Official v5 commit:
 
 ```text
-d8616f06f707ca6ba99526fb45e0b8fae672259a
+4b03f0a5e3b701c5a3ade87d35ed62c1699f93c6
 ```
 
-Representative manifests:
+This snapshot contains 11 catalog plugins. Representative manifests:
 
-- [example](https://github.com/noctalia-dev/official-plugins/blob/d8616f06f707ca6ba99526fb45e0b8fae672259a/example/plugin.toml)
-- [timer](https://github.com/noctalia-dev/official-plugins/blob/d8616f06f707ca6ba99526fb45e0b8fae672259a/timer/plugin.toml)
-- [screen recorder](https://github.com/noctalia-dev/official-plugins/blob/d8616f06f707ca6ba99526fb45e0b8fae672259a/screen_recorder/plugin.toml)
+- [Kaomoji](https://github.com/noctalia-dev/official-plugins/blob/4b03f0a5e3b701c5a3ade87d35ed62c1699f93c6/kaomoji/plugin.toml)
+- [example](https://github.com/noctalia-dev/official-plugins/blob/4b03f0a5e3b701c5a3ade87d35ed62c1699f93c6/example/plugin.toml)
+- [timer](https://github.com/noctalia-dev/official-plugins/blob/4b03f0a5e3b701c5a3ade87d35ed62c1699f93c6/timer/plugin.toml)
+- [screen recorder](https://github.com/noctalia-dev/official-plugins/blob/4b03f0a5e3b701c5a3ade87d35ed62c1699f93c6/screen_recorder/plugin.toml)
 
 Community v5 commit:
 
 ```text
-6cee9bbcc726c29e3c1190ae52c6e6135f6819ce
+35afaa444de6389164360b1ecadb87c972b32912
 ```
 
-Representative manifests:
+This snapshot contains 51 catalog plugins. Representative manifests:
 
-- [Upbeat](https://github.com/noctalia-dev/community-plugins/blob/6cee9bbcc726c29e3c1190ae52c6e6135f6819ce/upbeat/plugin.toml)
-- [File Search](https://github.com/noctalia-dev/community-plugins/blob/6cee9bbcc726c29e3c1190ae52c6e6135f6819ce/file-search/plugin.toml)
-- [ShareDND](https://github.com/noctalia-dev/community-plugins/blob/6cee9bbcc726c29e3c1190ae52c6e6135f6819ce/sharednd/plugin.toml)
-- [Battery Graph](https://github.com/noctalia-dev/community-plugins/blob/6cee9bbcc726c29e3c1190ae52c6e6135f6819ce/battery-graph/plugin.toml)
-- [Drive Health](https://github.com/noctalia-dev/community-plugins/blob/6cee9bbcc726c29e3c1190ae52c6e6135f6819ce/drive-health/plugin.toml)
+- [Upbeat](https://github.com/noctalia-dev/community-plugins/blob/35afaa444de6389164360b1ecadb87c972b32912/upbeat/plugin.toml)
+- [File Search](https://github.com/noctalia-dev/community-plugins/blob/35afaa444de6389164360b1ecadb87c972b32912/file-search/plugin.toml)
+- [ShareDND](https://github.com/noctalia-dev/community-plugins/blob/35afaa444de6389164360b1ecadb87c972b32912/sharednd/plugin.toml)
+- [Battery Graph](https://github.com/noctalia-dev/community-plugins/blob/35afaa444de6389164360b1ecadb87c972b32912/battery-graph/plugin.toml)
+- [Drive Health](https://github.com/noctalia-dev/community-plugins/blob/35afaa444de6389164360b1ecadb87c972b32912/drive-health/plugin.toml)
 
 Legacy v4 corpus commit:
 
@@ -60,7 +71,9 @@ Legacy v4 corpus commit:
 ea21cb63d063075bc0acd72d8b946ce2c5eef00d
 ```
 
-- [legacy v4 tree](https://github.com/noctalia-dev/noctalia-plugins/tree/ea21cb63d063075bc0acd72d8b946ce2c5eef00d)
+- [legacy v4 tree](https://github.com/noctalia-dev/legacy-v4-plugins/tree/ea21cb63d063075bc0acd72d8b946ce2c5eef00d)
+
+This snapshot contains 132 manifests.
 
 ## Installed-tool observation
 

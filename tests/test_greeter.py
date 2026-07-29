@@ -5,7 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class GreeterRuntimeTests(unittest.TestCase):
+class GreeterContractTests(unittest.TestCase):
     def test_cage_greeter_uses_a_fullscreen_toplevel(self) -> None:
         source = (ROOT / "greeter/shell.qml").read_text(encoding="utf-8")
 

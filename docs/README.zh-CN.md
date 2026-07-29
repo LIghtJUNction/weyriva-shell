@@ -1,17 +1,28 @@
 # Weyriva Shell 中文简介
 
 Weyriva Shell（读作 **way-REE-vuh**）是一个以 Arch 为主要目标、零配置的
-Niri 桌面环境。Weyriva 自己拥有 Shell、登录界面和会话内锁屏；目标运行时是
-独立的 Quickshell 0.3 / QtQuick 实现，不把桌面运行时委托给 Noctalia。
+Niri 桌面环境。Weyriva 自己拥有 Shell、登录界面和会话内锁屏。生产架构
+由 Rust 实现 `weyriva` CLI、常驻守护进程、启动/会话控制、诊断和插件控制
+面，并由 Rust 实现隔离的 `weyriva-luau-host`；Quickshell 0.3 / QtQuick
+只负责 UI 呈现，不把桌面运行时委托给 Noctalia。
 
 greetd 只在内部负责 VT、PAM 认证和创建会话。它不是可见产品界面，Weyriva
 也不会重写 PAM。
 
-> **迁移状态：** 仓库正在从早期 Noctalia 委托脚手架迁移到上述独立架构。
-> 一键安装脚本、Niri 配置、本地控制守护进程、初版原生 Quickshell
-> Shell/Greeter 源码和仓库检查已经存在；原生桌面 Surface、一体化 Greeter
-> 与锁屏、兼容插件执行、最终打包和 XRY 验收并未因此完成。详见
+> **当前状态：** 生产控制面、启动/会话命令、诊断、插件生命周期与 Luau
+> Host 已由 Rust workspace 实现。一键安装器和本地 AUR 配方都会构建并
+> 打包 `weyriva` 与 `weyriva-luau-host`；这只是仓库实现，不代表 AUR
+> 已发布或 XRY 已部署这次切换。精确的 `noctalia-v5-luau/1` API 3 单
+> Launcher Provider 切片已通过本地测试，包含固定版本官方 Kaomoji 证据，
+> Provider 分类也已传到 QML。XRY 有已批准的 UI iteration 3
+> Shell/Greeter 预览，并保留此前部署的控制面里程碑，但尚未部署本次全
+> Rust 切换。其他五种 Entry、API 4–19、v4 QML Host、完整 Surface、
+> 干净打包证据和完整 XRY 验收仍未完成。详见
 > [兼容与验收表](NOCTALIA_PARITY.md)。
+
+插件产品名称是 **Weyriva Plugins**。`v5` 只属于上游兼容 profile 标识，
+不是 Weyriva 的产品版本。Python 可以作为仓库测试工具，但不是生产运行时
+依赖，也不是插件语言。
 
 ## 产品范围
 
@@ -39,17 +50,20 @@ Weyriva 的确定目标包括：
 
 Weyriva 保留两个项目自有的设计参考：
 
-- Apple-inspired：按下即反馈、直接操控、空间连续、动画可中断，并提供降动效
-  等价反馈；
-- Anthropic-inspired：粗而略不规则的近黑手绘线、象牙色非规则承载形和一个
-  覆盖全画布的柔和强调色。
+- Apple-inspired 功能层：按下即反馈、严格的来源屏幕归属、按触发点区分的
+  可中断动效，以及降动效等价反馈；
+- Anthropic-inspired 只用于环境背景、品牌时刻、Greeter/Lock 构图和真正
+  的空状态。
+
+日常界面使用聚焦的命令面板、紧凑且对齐触发点的工具弹层、语义化明暗主题和
+较大的结构化工作区；不使用包住所有面板的统一承载形、默认卡片网格或无效控件。
 
 它们是设计语言参考，不表示复制、隶属或背书。Weyriva 与 Apple、Anthropic、
 Noctalia 均无关联。
 
 ## 零配置安装
 
-目标安装方式只有一个：
+安装入口只有一个：
 
 ```bash
 ./install.sh
@@ -58,9 +72,11 @@ Noctalia 均无关联。
 不提供个性化问卷。Arch 及其衍生发行版是主要目标；Fedora、
 Debian/Ubuntu 和 openSUSE 尽量支持。需要其他策略的用户应自行 Fork。
 
-脚本目前已经存在，但依赖与会话链仍在原生迁移范围内。在
-[测试与验收](TESTING.md)通过之前，它是集成脚手架，不是生产就绪安装器。
-安装过程不得在没有明确运维请求时重启正在使用的图形会话。
+脚本会先解析依赖，再构建两个 locked Rust release 二进制并验证命令面，
+随后安装 Shell、Greeter、用户服务和固定默认配置。Arch 包管理是主要路径；
+`dnf`、`apt` 和 `zypper` 为尽力支持。干净机器、AUR 发布和非 Arch
+发行版的实测仍是生产就绪前置条件。安装器不会重启 greetd 或原本未运行的
+用户服务。
 
 ## 目标快捷键
 
@@ -82,10 +98,17 @@ Mod+1/2/3       工作区
 这些是产品交互合同，不是“按钮已可用”的声明。每个 Surface 都必须通过
 鼠标、键盘、焦点和可见状态验收。
 
-## Shell、IPC 与插件
+## Weyriva Plugins
 
-仓库当前包含版本化本地 JSON 控制守护进程和 legacy 可执行插件通道。它们是
-迁移基础设施，不是桌面渲染器。独立 Quickshell 运行时将拥有原生 Surface IPC。
+已通过本地测试的 Rust `weyriva` 插件核心是有序固定源、安全不可变安装与
+状态、生命周期、Host 会话、受限动作和 Unix IPC 的唯一目标所有者。每个已
+支持 Entry 运行在独立且有边界的 Rust Luau Host 进程中；QML 不加载插件
+代码，Launcher 只渲染验证后的结果。本地安装器与打包元数据已经使用这套
+Rust 控制面，但已安装机器和 XRY 行为仍需独立证据。
+
+当前兼容声明严格限定为：API 3、单一 Launcher Provider Entry，并已用自有
+Fixture 和固定版本的官方 Kaomoji 插件在本地验证，Provider 分类也已传到
+QML。它不代表其他五种 Noctalia Entry、API 4–19 或 v4 QML profile 已兼容。
 
 Noctalia 只作为固定提交的公开行为与插件 ABI 参考。Weyriva 必须自行实现兼容
 行为；能列出 catalog 或解析 manifest 不等于插件兼容。
@@ -100,9 +123,12 @@ Noctalia 只作为固定提交的公开行为与插件 ABI 参考。Weyriva 必�
 ```bash
 make test
 make check
+./scripts/check.sh
 ```
 
-本地检查不能代替真实登录、锁屏、按钮、日历、插件、打包与 XRY 实机验收。
+Make 目标执行 locked Rust 检查；`scripts/check.sh` 另外覆盖仓库策略、
+安装器、Shell、配置、QML 与可用的系统工具。Python 只用于测试工具。本地
+检查不能代替真实登录、锁屏、按钮、日历、打包与 XRY 实机验收。
 
 主要文档：
 

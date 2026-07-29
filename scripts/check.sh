@@ -6,17 +6,28 @@ CHECK_TMP=$(mktemp -d)
 trap 'rm -rf "$CHECK_TMP"' EXIT
 
 printf '%s\n' '[check] Python compile'
-PYTHONPYCACHEPREFIX="$CHECK_TMP/pycache" python3 -m py_compile "$ROOT/bin/weyriva" "$ROOT/examples/plugins/hello/hello.py" "$ROOT/tests/test_weyriva.py"
+mapfile -d '' PYTHON_TEST_FILES < <(
+    find "$ROOT/tests" "$ROOT/crates" \
+        -path '*/tests/*' -type f -name '*.py' -print0 |
+        sort -z
+)
+PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPYCACHEPREFIX="$CHECK_TMP/pycache" \
+    python3 -m py_compile "${PYTHON_TEST_FILES[@]}"
 
 printf '%s\n' '[check] Python unit tests'
-PYTHONPYCACHEPREFIX="$CHECK_TMP/pycache" python3 -m unittest discover -s "$ROOT/tests" -v
+PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPYCACHEPREFIX="$CHECK_TMP/pycache" \
+    python3 -m unittest discover -s "$ROOT/tests" -v
 
 printf '%s\n' '[check] Bash syntax'
 bash -n "$ROOT/install.sh"
 while IFS= read -r -d '' script; do bash -n "$script"; done < <(find "$ROOT/scripts" -name '*.sh' -type f -print0)
 
 printf '%s\n' '[check] JSON, TOML, INI, and desktop syntax'
-python3 - "$ROOT" <<'PY'
+PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPYCACHEPREFIX="$CHECK_TMP/pycache" \
+    python3 - "$ROOT" <<'PY'
 import configparser
 import json
 import sys
@@ -24,9 +35,25 @@ import tomllib
 from pathlib import Path
 
 root = Path(sys.argv[1])
-for path in (*root.rglob("*.json"), *root.rglob("*.jsonc")):
+
+
+def source_files(suffix: str):
+    return (
+        path
+        for path in root.rglob(f"*{suffix}")
+        if not {
+            ".git",
+            "target",
+            "__pycache__",
+            ".pytest_cache",
+            ".ruff_cache",
+        }.intersection(path.parts)
+    )
+
+
+for path in (*source_files(".json"), *source_files(".jsonc")):
     json.loads(path.read_text(encoding="utf-8"))
-for path in root.rglob("*.toml"):
+for path in source_files(".toml"):
     with path.open("rb") as stream:
         tomllib.load(stream)
 for relative in ("user-share/wayland-sessions/weyriva.desktop",):
@@ -94,14 +121,22 @@ grep -qx '// local modification' "$MANAGED_HOME/config/niri/config.kdl"
 test -e "$MANAGED_HOME/data/weyriva/shell/Weyriva/Theme.qml"
 
 printf '%s\n' '[check] Repository text whitespace and final newlines'
-python3 - "$ROOT" <<'PY'
+PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPYCACHEPREFIX="$CHECK_TMP/pycache" \
+    python3 - "$ROOT" <<'PY'
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-excluded = {root / ".git", root / "__pycache__"}
+excluded_names = {
+    ".git",
+    "target",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+}
 for path in root.rglob("*"):
-    if not path.is_file() or any(parent in excluded for parent in path.parents):
+    if not path.is_file() or excluded_names.intersection(path.parts):
         continue
     data = path.read_bytes()
     if b"\0" in data:
@@ -112,6 +147,27 @@ for path in root.rglob("*"):
         if line.rstrip(b" \t") != line:
             raise SystemExit(f"trailing whitespace: {path.relative_to(root)}:{number}")
 PY
+
+printf '%s\n' '[check] Rust formatting'
+cargo fmt --manifest-path "$ROOT/Cargo.toml" --all -- --check
+
+printf '%s\n' '[check] Rust compile and lint'
+cargo clippy \
+    --manifest-path "$ROOT/Cargo.toml" \
+    --locked \
+    --workspace \
+    --all-targets \
+    --all-features \
+    -- \
+    -D warnings
+
+printf '%s\n' '[check] Rust tests'
+cargo test \
+    --manifest-path "$ROOT/Cargo.toml" \
+    --locked \
+    --workspace \
+    --all-targets \
+    --all-features
 
 if command -v shellcheck >/dev/null; then
     printf '%s\n' '[check] shellcheck'
@@ -159,6 +215,107 @@ if [[ -n "$QT6_QMLLINT" ]]; then
         "${QML_FILES[@]}"
 else
     printf '%s\n' '[skip] Qt 6 qmllint is not installed'
+fi
+
+printf '%s\n' '[check] all-Rust product policy'
+PYTHON_SURFACE_MATCHES="$CHECK_TMP/python-surface.txt"
+while IFS= read -r -d '' path; do
+    relative=${path#"$ROOT"/}
+    case $relative in
+        tests/* | crates/*/tests/* | scripts/*.py)
+            ;;
+        *)
+            printf '%s\n' "$relative" >>"$PYTHON_SURFACE_MATCHES"
+            ;;
+    esac
+done < <(
+    find "$ROOT" \
+        \( -path "$ROOT/.git" -o -path "$ROOT/target" \) -prune -o \
+        -type f -name '*.py' -print0
+)
+if [[ -s $PYTHON_SURFACE_MATCHES ]]; then
+    printf '%s\n' 'Python file found outside test/static tooling paths:' >&2
+    cat "$PYTHON_SURFACE_MATCHES" >&2
+    exit 1
+fi
+
+PYTHON_RUNTIME_MATCHES="$CHECK_TMP/python-runtime.txt"
+if rg -n -i \
+    '(^#!.*python|^[[:space:]]*(from|import)[[:space:]]+[A-Za-z_])' \
+    "$ROOT/bin" \
+    "$ROOT/examples" \
+    "$ROOT/lib" \
+    "$ROOT/packaging" \
+    "$ROOT/install.sh" \
+    "$ROOT/scripts/install-system.sh" \
+    "$ROOT/scripts/install-greetd.sh" \
+    "$ROOT/scripts/install.sh" \
+    >"$PYTHON_RUNTIME_MATCHES"; then
+    printf '%s\n' 'Python runtime/import surface found in product paths:' >&2
+    cat "$PYTHON_RUNTIME_MATCHES" >&2
+    exit 1
+fi
+
+PYTHON_PACKAGE_MATCHES="$CHECK_TMP/python-package.txt"
+if rg -n '\bpython(3)?\b' \
+    "$ROOT/install.sh" \
+    "$ROOT/packaging" \
+    "$ROOT/scripts/install-system.sh" \
+    "$ROOT/scripts/install-greetd.sh" \
+    "$ROOT/scripts/install.sh" \
+    >"$PYTHON_PACKAGE_MATCHES"; then
+    printf '%s\n' 'installed/package Python dependency found:' >&2
+    cat "$PYTHON_PACKAGE_MATCHES" >&2
+    exit 1
+fi
+
+LEGACY_PLUGIN_MATCHES="$CHECK_TMP/legacy-plugin.txt"
+if rg -n -i '(plugins-v5|weyriva_plugins_v5)' \
+    "$ROOT/bin" \
+    "$ROOT/config" \
+    "$ROOT/examples" \
+    "$ROOT/greeter" \
+    "$ROOT/lib" \
+    "$ROOT/packaging" \
+    "$ROOT/shell" \
+    "$ROOT/systemd" \
+    "$ROOT/user-share" \
+    "$ROOT/install.sh" \
+    "$ROOT/scripts/install-greetd.sh" \
+    "$ROOT/scripts/install.sh" \
+    >"$LEGACY_PLUGIN_MATCHES"; then
+    printf '%s\n' 'legacy Python plugin product name found:' >&2
+    cat "$LEGACY_PLUGIN_MATCHES" >&2
+    exit 1
+fi
+legacy_cleanup_count=$(awk '{
+    count += gsub(/weyriva_plugins_v5[.]py/, "")
+} END {
+    print count + 0
+}' "$ROOT/scripts/install-system.sh")
+if [[ $legacy_cleanup_count -ne 1 ]] ||
+    ! grep -Fqx \
+        'legacy_runtime=/usr/lib/weyriva/weyriva_plugins_v5.py' \
+        "$ROOT/scripts/install-system.sh" ||
+    ! grep -Fq \
+        "cp -a --no-dereference -- \"\$legacy_runtime\" \"\$legacy_backup\"" \
+        "$ROOT/scripts/install-system.sh" ||
+    ! grep -Fq "rm -f -- \"\$legacy_runtime\"" \
+        "$ROOT/scripts/install-system.sh"; then
+    printf '%s\n' \
+        'legacy Python cleanup must be the single no-follow backup/removal exception' >&2
+    exit 1
+fi
+
+RESIDUE_MATCHES="$CHECK_TMP/python-residue.txt"
+find "$ROOT" \
+    \( -path "$ROOT/.git" -o -path "$ROOT/target" \) -prune -o \
+    \( -type d -name __pycache__ -o -type f \( -name '*.pyc' -o -name '*.pyo' \) \) \
+    -print >"$RESIDUE_MATCHES"
+if [[ -s $RESIDUE_MATCHES ]]; then
+    printf '%s\n' 'Python cache residue found in repository:' >&2
+    cat "$RESIDUE_MATCHES" >&2
+    exit 1
 fi
 
 printf '%s\n' '[check] forbidden runtime dependency scan'

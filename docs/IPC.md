@@ -4,32 +4,50 @@ Weyriva owns its IPC. The target native Quickshell runtime must not forward
 shell commands to Noctalia. Transitional bridges in the current scaffold are
 migration artifacts and are not stable product contracts.
 
-## Versioned local JSON lane
+## Rust control lane
 
-The repository currently implements a local `weyriva.*` JSON control lane for
-diagnostics, Niri queries, and bounded legacy executable plugins.
+`crates/weyriva/` is the source for the production CLI and resident
+daemon. Its user-local Unix socket carries the versioned `weyriva.*` JSON
+protocol for shell startup/session control and **Weyriva Plugins**. Startup,
+shell, session, diagnosis, plugin lifecycle, the installer, systemd units, and
+the local AUR recipe use the Rust command surface. `/usr/bin/weyriva` is the
+installed path produced by those local packaging paths; publication and
+target-machine deployment remain separate claims.
 
-Representative calls:
+The locally implemented plugin CLI shape uses explicit canonical IDs:
 
 ```bash
-weyriva ipc call weyriva.ping
-weyriva ipc call weyriva.info
-weyriva ipc call weyriva.methods
-weyriva ipc call weyriva.niri.outputs
-weyriva ipc call weyriva.niri.windows
-weyriva ipc call weyriva.plugin.list
+weyriva plugin source list
+weyriva plugin install noctalia/kaomoji
+weyriva plugin enable noctalia/kaomoji
+weyriva plugin status noctalia/kaomoji
+weyriva plugin reload noctalia/kaomoji
+weyriva plugin disable noctalia/kaomoji
+weyriva plugin uninstall noctalia/kaomoji
 ```
 
 The protocol is versioned. Requests and responses are bounded, malformed
-frames are rejected, plugin output is size-limited, and plugin execution has a
-timeout. The socket is user-local and must not become a network listener.
+frames are rejected, output is size-limited, and plugin execution has bounded
+time and resources. The socket is user-local and must not become a network
+listener.
 
-This lane is **implemented locally**. Its installed service and full
-integration with the independent shell are not yet verified.
+Weyriva Plugins lifecycle methods are versioned under `weyriva.plugin.v1.*`: source
+list/add/remove, install, status, enable, disable, reload, uninstall, query, and
+activate. The daemon owns persistent host processes; the QML launcher calls the
+CLI with argument arrays and renders validated result objects.
+
+The daemon-to-host protocol is newline-delimited JSON identified by
+`weyriva-luau-host/1`. Messages, result counts, strings, VM memory, callback
+time, actions, and filesystem reads are bounded. This API 3 launcher slice is
+implemented and tested locally, including provider categories transported to
+QML, and is wired into local installation/package metadata. It has not been
+verified through a clean package install or this revision's XRY deployment.
+`noctalia-v5-luau/1` names the upstream compatibility profile, not a Weyriva
+product version.
 
 ## Native shell lane
 
-The planned native lane controls Weyriva surfaces and state:
+The native lane incrementally controls Weyriva surfaces and state:
 
 - status and readiness;
 - panel open, close, and toggle;
@@ -72,10 +90,13 @@ Visible controls observe the same operation state as IPC clients.
 
 Plugin IPC depends on the compatibility profile:
 
-- v5 Luau entries receive `onIpc(event, payload)` through the Weyriva host;
+- `noctalia-v5-luau/1` entries receive `onIpc(event, payload)` through the
+  Rust `weyriva-luau-host`;
 - v4 QML plugins register `IpcHandler` targets in the isolated compatibility
-  host;
-- legacy executable plugins remain on the bounded JSON lane.
+  host once that planned lane exists.
+
+Python is test tooling only. It is not a documented production protocol,
+runtime, or plugin-authoring surface.
 
 No profile is compatible until IPC arguments, targeting, lifecycle, errors, and
 return behavior pass self-authored fixtures. See
@@ -88,8 +109,7 @@ return behavior pass self-authored fixtures. See
 - Keep user and plugin namespaces separate.
 - Do not expose passwords, tokens, clipboard data, or private notification
   content in diagnostics.
-- Treat compatible Luau, QML, and executable plugins as trusted user code, not
-  as a sandbox.
+- Treat compatible Luau and QML plugins as trusted user code, not as a sandbox.
 - Privileged operations use an existing scoped broker and return explicit
   authorization errors.
 

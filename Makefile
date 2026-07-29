@@ -1,10 +1,12 @@
 .PHONY: check test install update uninstall
 
 check:
-	./scripts/check.sh
+	cargo fmt --all -- --check
+	cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+	cargo test --locked --workspace --all-targets --all-features
 
 test:
-	python3 -m unittest discover -s tests -v
+	cargo test --locked --workspace --all-targets --all-features
 
 install:
 	./install.sh

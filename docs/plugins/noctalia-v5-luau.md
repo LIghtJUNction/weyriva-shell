@@ -4,21 +4,24 @@ Profile: `noctalia-v5-luau/1`
 
 Runtime owner: Weyriva
 
-Status: in progress
+Status: API 3 single-launcher-provider slice passed locally; overall in progress
 
 This profile reproduces the documented public v5 plugin ABI in a Weyriva-owned
 Luau host. It does not require or launch Noctalia.
+It is a compatibility profile inside **Weyriva Plugins**, not a Weyriva product
+version. The passing slice is local implementation/test evidence, not an
+installed-runtime or XRY claim.
 
 ## Public baseline
 
 The normative research baseline is the Noctalia documentation commit
-`b1e6e9b5235995ba6716d1814b4b127714d8f172`. See
+`a0fcbcafc709836f46e1c23b18ade6947d442e26`. See
 [Upstream baselines](upstream-baselines.md).
 
-The public ledger at that commit defines cumulative API levels `3..18`.
-Levels 3–16 were associated with beta.3–beta.6; levels 17 and 18 were marked
-unreleased. Weyriva advertises only the levels its fixtures pass. The first
-implementation target is `3..16`; 17 and 18 remain separate gates.
+The public ledger at that commit defines cumulative API levels `3..19`.
+Noctalia beta.6 accepts `3..16`; current upstream main accepts `3..19`.
+Weyriva advertises only the exact entry/API combinations its fixtures pass.
+At present that is API 3 with exactly one launcher-provider entry.
 
 ## Package layout
 
@@ -217,6 +220,7 @@ range. Path sources have no revision export.
 | 16 | extended system/disk/network statistics |
 | 17 | service lifecycle and exit reasons; unreleased at baseline |
 | 18 | panel frame ticks; unreleased at baseline |
+| 19 | time-zone list and lookup |
 
 ## Acceptance
 

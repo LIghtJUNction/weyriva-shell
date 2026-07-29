@@ -2,8 +2,6 @@
 //@ pragma DataDir $BASE/weyriva
 //@ pragma CacheDir $BASE/weyriva
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
@@ -13,22 +11,22 @@ import qs.Weyriva
 
 ShellRoot {
     id: root
-
+    function defaultRouteScreen() {
+        return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+    }
     Timer {
         interval: 1000
         repeat: true
         running: true
         onTriggered: ShellState.now = new Date()
     }
-
     Connections {
         target: ShellState
         function onRequestLock() {
-            ShellState.route = ""
+            ShellState.closeRoute()
             sessionLock.locked = true
         }
     }
-
     NotificationServer {
         id: notifications
         bodySupported: true
@@ -38,7 +36,7 @@ ShellRoot {
         onNotification: notification => {
             notification.tracked = true
             if (!ShellState.doNotDisturb)
-                ShellState.route = "notifications"
+                ShellState.openRoute("notifications", root.defaultRouteScreen())
         }
     }
 
@@ -50,100 +48,52 @@ ShellRoot {
                 screen: modelData
                 visible: ShellState.barVisible
                 anchors { top: true; left: true; right: true }
-                implicitHeight: 64
-                exclusiveZone: 64
-                mask: Region { item: barSurface }
+                implicitHeight: 48
+                exclusiveZone: 48
+                mask: Region { item: topBar }
                 color: "transparent"
 
-                Rectangle {
-                    id: barSurface
+                TopBar {
+                    id: topBar
                     anchors.top: parent.top
                     anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.topMargin: 8
-                    width: Math.min(parent.width - 24, 900)
-                    height: 48
-                    color: Theme.chrome
-                    radius: 24
-                    border.width: 3
-                    border.color: Theme.ink
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 10
-                        spacing: 5
-
-                        ActionButton {
-                            glyph: "W"
-                            text: "Applications"
-                            compact: true
-                            chrome: true
-                            selected: ShellState.route === "launcher"
-                            onClicked: ShellState.toggleRoute("launcher")
-                        }
-                        ActionButton {
-                            glyph: "◉"
-                            text: "Control center"
-                            compact: true
-                            chrome: true
-                            selected: ShellState.route === "control-center"
-                            onClicked: ShellState.toggleRoute("control-center")
-                        }
-                        Item { Layout.fillWidth: true }
-                        ActionButton {
-                            text: Qt.formatDateTime(ShellState.now, "ddd  MMM d  hh:mm")
-                            chrome: true
-                            selected: ShellState.route === "calendar"
-                            onClicked: ShellState.toggleRoute("calendar")
-                        }
-                        ActionButton {
-                            glyph: "●"
-                            text: "Notifications"
-                            compact: true
-                            chrome: true
-                            selected: ShellState.route === "notifications"
-                            onClicked: ShellState.toggleRoute("notifications")
-                        }
-                        ActionButton {
-                            glyph: "✦"
-                            text: "Wallpaper"
-                            compact: true
-                            chrome: true
-                            selected: ShellState.route === "wallpaper"
-                            onClicked: ShellState.toggleRoute("wallpaper")
-                        }
-                        ActionButton {
-                            glyph: "⚙"
-                            text: "Settings"
-                            compact: true
-                            chrome: true
-                            selected: ShellState.route === "settings"
-                            onClicked: ShellState.toggleRoute("settings")
-                        }
-                        ActionButton {
-                            glyph: "▣"
-                            text: "Lock"
-                            compact: true
-                            chrome: true
-                            onClicked: ShellState.requestLock()
-                        }
-                    }
+                    anchors.topMargin: 4
+                    width: Math.min(parent.width - 20, 760)
+                    sourceScreen: modelData
                 }
             }
         }
     }
-
     Variants {
         model: Quickshell.screens
         delegate: Component {
             PanelWindow {
                 id: utilityHost
                 required property var modelData
+                readonly property real barWidth: Math.min(width - 20, 760)
+                readonly property real barLeft: (width - barWidth) / 2
+                readonly property real barRight: barLeft + barWidth
                 property bool active: [
-                    "control-center",
-                    "calendar",
-                    "notifications"
+                    "control-center", "calendar", "notifications"
                 ].includes(ShellState.route)
+                    && ShellState.routeScreen === modelData
+                readonly property real controlX: boundedX(barLeft)
+                readonly property real calendarX: boundedX(
+                    width / 2 - utilitySurface.width / 2
+                )
+                readonly property real notificationsX: boundedX(
+                    barRight - utilitySurface.width
+                )
+                readonly property real routeX:
+                    ShellState.presentationRoute === "control-center" ? controlX
+                    : ShellState.presentationRoute === "calendar" ? calendarX
+                    : notificationsX
+
+                function boundedX(value) {
+                    return Math.max(10, Math.min(
+                        value, width - utilitySurface.width - 10
+                    ))
+                }
 
                 screen: modelData
                 anchors { top: true; left: true; right: true; bottom: true }
@@ -151,27 +101,31 @@ ShellRoot {
                 focusable: active
                 exclusionMode: ExclusionMode.Ignore
                 WlrLayershell.keyboardFocus: active
-                    ? WlrKeyboardFocus.OnDemand
-                    : WlrKeyboardFocus.None
+                    ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                 mask: Region { item: active ? utilitySurface : null }
                 color: "transparent"
 
                 SurfacePanel {
                     id: utilitySurface
                     anchors.top: parent.top
-                    anchors.right: parent.right
-                    anchors.topMargin: 72
-                    anchors.rightMargin: 12
-                    width: 430
-                    height: ShellState.route === "control-center" ? 350 : 520
+                    anchors.topMargin: 54
+                    x: utilityHost.routeX
+                    width: Math.min(390, parent.width - 20)
+                    height: ShellState.presentationRoute === "control-center" ? 310
+                        : ShellState.presentationRoute === "calendar" ? 470 : 440
                     notificationServer: notifications
                     presentation: "utility"
+                    presentationRoute: ShellState.presentationRoute
                     active: utilityHost.active
+                    sourceOffsetX: ShellState.presentationRoute === "control-center" ? -14
+                        : ShellState.presentationRoute === "calendar" ? 0 : 14
+                    sourceOrigin: ShellState.presentationRoute === "control-center"
+                        ? Item.TopLeft : ShellState.presentationRoute === "calendar"
+                            ? Item.Top : Item.TopRight
                 }
             }
         }
     }
-
     Variants {
         model: Quickshell.screens
         delegate: Component {
@@ -179,10 +133,9 @@ ShellRoot {
                 id: centeredHost
                 required property var modelData
                 property bool active: [
-                    "launcher",
-                    "wallpaper",
-                    "settings"
+                    "launcher", "wallpaper", "settings"
                 ].includes(ShellState.route)
+                    && ShellState.routeScreen === modelData
 
                 screen: modelData
                 anchors { top: true; left: true; right: true; bottom: true }
@@ -190,21 +143,23 @@ ShellRoot {
                 focusable: active
                 exclusionMode: ExclusionMode.Ignore
                 WlrLayershell.keyboardFocus: active
-                    ? WlrKeyboardFocus.OnDemand
-                    : WlrKeyboardFocus.None
+                    ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                 mask: Region { item: active ? centeredSurface : null }
                 color: "transparent"
 
                 SurfacePanel {
                     id: centeredSurface
                     anchors.centerIn: parent
-                    width: Math.min(parent.width - 72, 760)
+                    width: Math.min(parent.width - 64, 680)
                     height: ShellState.route === "launcher"
-                        ? Math.min(parent.height - 120, 620)
-                        : Math.min(parent.height - 140, 540)
+                        ? Math.min(parent.height - 112, 540)
+                        : Math.min(parent.height - 128, 500)
                     notificationServer: notifications
                     presentation: "centered"
+                    presentationRoute: ShellState.route
                     active: centeredHost.active
+                    sourceOffsetX: 0
+                    sourceOrigin: Item.Center
                 }
             }
         }
@@ -223,6 +178,7 @@ ShellRoot {
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
                 mask: Region { item: null }
                 color: Theme.background
+
                 Image {
                     anchors.fill: parent
                     source: ShellState.wallpaper
@@ -238,136 +194,12 @@ ShellRoot {
         locked: false
 
         WlSessionLockSurface {
-            color: Theme.carrier
+            color: Theme.background
 
-            Item {
+            LockSurface {
+                id: lockView
                 anchors.fill: parent
-
-                BrandMark {
-                    visible: parent.width > 860
-                    width: 310
-                    height: 238
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: Math.max(70, parent.width * 0.10)
-                }
-
-                Item {
-                    id: lockCard
-                    anchors.centerIn: parent
-                    anchors.horizontalCenterOffset: parent.width > 860
-                        ? Math.min(250, parent.width * 0.18) : 0
-                    width: Math.min(480, parent.width - 56)
-                    height: 370
-
-                    Canvas {
-                        anchors.fill: parent
-                        onWidthChanged: requestPaint()
-                        onHeightChanged: requestPaint()
-                        onPaint: {
-                            const context = getContext("2d")
-                            context.clearRect(0, 0, width, height)
-                            context.fillStyle = Theme.ivory
-                            context.strokeStyle = Theme.ink
-                            context.lineWidth = 6
-                            context.lineJoin = "round"
-                            context.beginPath()
-                            context.moveTo(width * 0.08, height * 0.05)
-                            context.bezierCurveTo(
-                                width * 0.30, -2,
-                                width * 0.82, height * 0.01,
-                                width * 0.95, height * 0.12
-                            )
-                            context.bezierCurveTo(
-                                width + 2, height * 0.40,
-                                width * 0.98, height * 0.78,
-                                width * 0.90, height * 0.95
-                            )
-                            context.bezierCurveTo(
-                                width * 0.62, height + 2,
-                                width * 0.19, height * 0.98,
-                                width * 0.06, height * 0.87
-                            )
-                            context.bezierCurveTo(
-                                -2, height * 0.57,
-                                width * 0.01, height * 0.22,
-                                width * 0.08, height * 0.05
-                            )
-                            context.closePath()
-                            context.fill()
-                            context.stroke()
-                        }
-                    }
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 46
-                        anchors.rightMargin: 46
-                        anchors.topMargin: 42
-                        anchors.bottomMargin: 40
-                        spacing: 16
-
-                        Text {
-                            text: "WELCOME BACK"
-                            color: Theme.muted
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            font.letterSpacing: 1.2
-                        }
-                        Text {
-                            text: "Weyriva"
-                            color: Theme.ink
-                            font.pixelSize: 39
-                            font.bold: true
-                            font.letterSpacing: -0.9
-                        }
-                        Text {
-                            text: "Your desktop is covered and waiting."
-                            color: Theme.muted
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.preferredHeight: 5 }
-                        TextField {
-                            id: password
-                            Layout.fillWidth: true
-                            implicitHeight: 52
-                            echoMode: TextInput.Password
-                            placeholderText: "Password"
-                            color: Theme.ink
-                            placeholderTextColor: Theme.muted
-                            leftPadding: 18
-                            rightPadding: 18
-                            enabled: !auth.active
-                            Component.onCompleted: forceActiveFocus()
-                            background: Rectangle {
-                                color: Theme.paper
-                                radius: 17
-                                border.width: password.activeFocus ? 3 : 1
-                                border.color: Theme.ink
-                            }
-                            onAccepted: unlock()
-                            function unlock() {
-                                if (auth.active)
-                                    return
-                                auth.pendingResponse = text
-                                auth.start()
-                            }
-                        }
-                        ActionButton {
-                            Layout.fillWidth: true
-                            text: auth.active ? "Authenticating…" : "Unlock"
-                            enabled: !auth.active
-                            onClicked: password.unlock()
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: auth.message
-                            color: auth.messageIsError ? Theme.clay : Theme.muted
-                            wrapMode: Text.Wrap
-                            font.pixelSize: 12
-                        }
-                    }
-                }
+                authContext: auth
             }
         }
     }
@@ -384,17 +216,21 @@ ShellRoot {
         }
         onCompleted: result => {
             pendingResponse = ""
-            password.text = ""
+            lockView.clearPassword()
             if (result === PamResult.Success) {
                 sessionLock.locked = false
-                ShellState.route = ""
+                ShellState.closeRoute()
+            } else {
+                lockView.focusPassword()
             }
         }
     }
 
     IpcHandler {
         target: "weyriva"
-        function route(name: string): void { ShellState.toggleRoute(name) }
+        function route(name: string): void {
+            ShellState.toggleRoute(name, root.defaultRouteScreen())
+        }
         function lock(): void { ShellState.requestLock() }
         function clearNotifications(): void {
             const values = notifications.trackedNotifications.values
@@ -404,8 +240,12 @@ ShellRoot {
         function toggleDnd(): void {
             ShellState.doNotDisturb = !ShellState.doNotDisturb
         }
-        function setDnd(enabled: bool): void { ShellState.doNotDisturb = enabled }
-        function toggleBar(): void { ShellState.barVisible = !ShellState.barVisible }
+        function setDnd(enabled: bool): void {
+            ShellState.doNotDisturb = enabled
+        }
+        function toggleBar(): void {
+            ShellState.barVisible = !ShellState.barVisible
+        }
         function reload(): void { Quickshell.reload(false) }
         function status(): string {
             const visibleRoute = ShellState.route === ""

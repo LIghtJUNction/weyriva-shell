@@ -8,6 +8,10 @@
   },
   "plugins": {
     "v4": "planned",
-    "v5": "planned"
+    "v5": {
+      "schema": 1,
+      "plugin_api": 3,
+      "launcher_provider": true
+    }
   }
 }

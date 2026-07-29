@@ -67,7 +67,7 @@ their absence must not be hidden behind the reduced-motion switch.
 
 ### Control center
 
-- The two-column controls expose current state and real actions.
+- Compact control rows expose current state and real actions.
 - Toggles communicate on/off state without color alone.
 - Launch and lock actions report failure instead of silently doing nothing.
 
@@ -87,7 +87,8 @@ their absence must not be hidden behind the reduced-motion switch.
 
 - Wallpaper choices expose selected state and descriptive labels.
 - Settings values are explicit, not inferred only from button wording.
-- Unimplemented settings are disabled and identified as unavailable.
+- Only implemented settings actions are shown; future rows are not dead
+  controls.
 
 ### Greeter and lock
 
