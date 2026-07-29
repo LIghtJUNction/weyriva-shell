@@ -242,7 +242,11 @@ class InstallerTests(unittest.TestCase):
         apply_loop = 'for index in "${!install_sources[@]}"; do\n    install_system_file'
         self.assertLess(content.index("/etc/pam.d/greetd"), content.index(apply_loop))
         self.assertLess(
-            content.index('niri validate -c "$effective_niri_config"'),
+            content.index('niri validate -c "$ROOT/config/niri/config.kdl"'),
+            content.index(apply_loop),
+        )
+        self.assertLess(
+            content.index('niri validate -c "$user_niri_config"'),
             content.index(apply_loop),
         )
         guard = "if [[ $PREFLIGHT == true ]]; then"
@@ -250,7 +254,29 @@ class InstallerTests(unittest.TestCase):
         self.assertLess(content.index(guard), content.index("backup_existing()"))
         self.assertLess(content.index(guard), content.index(apply_loop))
         self.assertIn("--preflight", content.split(guard, 1)[0])
+        startup_ensure = '/usr/bin/weyriva startup ensure --user "$TARGET_USER"'
+        daemon_reload = "systemctl --user daemon-reload"
+        reload_guard = (
+            "if [[ -d $user_runtime_dir && ! -L $user_runtime_dir &&\n"
+            "    -S $user_bus && ! -L $user_bus ]]; then"
+        )
+        self.assertIn(startup_ensure, content)
+        self.assertIn('user_runtime_dir="/run/user/$target_uid"', content)
+        self.assertIn('user_bus="$user_runtime_dir/bus"', content)
+        self.assertIn(reload_guard, content)
+        self.assertIn('env XDG_RUNTIME_DIR="$user_runtime_dir"', content)
+        self.assertIn(daemon_reload, content)
+        startup_index = content.index(startup_ensure)
+        guard_index = content.index(reload_guard)
+        reload_runuser_index = content.index(
+            'runuser -u "$TARGET_USER" --', guard_index
+        )
+        daemon_reload_index = content.index(daemon_reload)
+        self.assertLess(startup_index, guard_index)
+        self.assertLess(guard_index, reload_runuser_index)
+        self.assertLess(reload_runuser_index, daemon_reload_index)
         self.assertNotIn("systemctl restart", content)
+        self.assertNotIn("systemctl --user restart", content)
 
     def test_aur_package_uses_only_independent_runtime(self) -> None:
         package = (ROOT / "packaging/aur/PKGBUILD").read_text()
@@ -849,6 +875,135 @@ class SessionLifecycleTests(unittest.TestCase):
     def _completed(returncode: int = 0, stdout: str = "") -> mock.Mock:
         return mock.Mock(returncode=returncode, stdout=stdout, stderr="")
 
+    @contextlib.contextmanager
+    def _startup_fixture(
+        self,
+        *,
+        user_config: str = "changed",
+        backup_collision: bool = False,
+    ):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / "home/tester"
+            home.mkdir(parents=True)
+            timestamp = "20260729-212000"
+
+            session_entry = root / "share/weyriva.desktop"
+            greetd_template = root / "share/greetd.toml"
+            greeter_environment = root / "share/greeter.env"
+            greeter_session = root / "share/greeter.desktop"
+            packaged_shell = root / "share/shell"
+            packaged_greeter = root / "share/greeter"
+            packaged_config = root / "share/config"
+            packaged_data = root / "share/data"
+            packaged_units = root / "share/systemd"
+            greetd_pam = root / "etc/pam.d/greetd"
+            greetd_config = root / "etc/greetd/config.toml"
+            greeter_state = root / "var/lib/weyriva-greeter"
+            display_manager = root / "etc/systemd/display-manager.service"
+
+            def write(path: Path, data: str = "fixture\n") -> None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(data)
+
+            write(
+                session_entry,
+                "[Desktop Entry]\nName=Weyriva\n"
+                "Exec=/usr/bin/weyriva session start\n",
+            )
+            expected_greeter = (
+                'command = "/usr/bin/env HOME=/var/lib/weyriva-greeter '
+                'XDG_STATE_HOME=/var/lib/weyriva-greeter/state '
+                'XDG_CACHE_HOME=/var/lib/weyriva-greeter/cache '
+                'XDG_CONFIG_HOME=/var/lib/weyriva-greeter/config '
+                '/usr/bin/cage -s -- /usr/bin/quickshell --path '
+                '/usr/share/weyriva/greeter"\nuser = "greeter"\n'
+            )
+            write(greetd_template, expected_greeter)
+            write(greetd_config, expected_greeter)
+            write(greeter_environment)
+            write(greeter_session)
+            write(packaged_shell / "shell.qml")
+            write(packaged_greeter / "shell.qml")
+            packaged_niri = packaged_config / "niri/config.kdl"
+            write(packaged_niri, "packaged niri\n")
+            for wallpaper in weyriva.REQUIRED_WALLPAPERS:
+                write(packaged_data / "wallpapers" / wallpaper)
+            for unit_name in weyriva.WEYRIVA_UNITS:
+                write(packaged_units / unit_name)
+            for unit_name in weyriva.NIRI_WANTED_UNITS:
+                link = packaged_units / "niri.service.wants" / unit_name
+                link.parent.mkdir(parents=True, exist_ok=True)
+                link.symlink_to(f"../{unit_name}")
+            write(greetd_pam, "session include system-login\n")
+            greeter_state.parent.mkdir(parents=True)
+
+            niri_config = home / ".config/niri/config.kdl"
+            niri_config.parent.mkdir(parents=True)
+            if user_config == "changed":
+                niri_config.write_text("old user niri\n")
+            elif user_config == "identical":
+                niri_config.write_bytes(packaged_niri.read_bytes())
+            elif user_config == "symlink":
+                target = root / "unsafe-niri"
+                write(target, "unsafe\n")
+                niri_config.symlink_to(target)
+            elif user_config == "directory":
+                niri_config.mkdir()
+            else:
+                raise AssertionError(f"unknown fixture kind: {user_config}")
+
+            niri_backup = (
+                home / ".local/state/weyriva/startup-backups"
+                / timestamp / "niri/config.kdl"
+            )
+            if backup_collision:
+                write(niri_backup, "collision\n")
+
+            account = mock.Mock(pw_dir=str(home), pw_uid=1001, pw_gid=1002)
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(mock.patch.object(weyriva.os, "geteuid", return_value=0))
+                stack.enter_context(mock.patch.object(weyriva.pwd, "getpwnam", return_value=account))
+                stack.enter_context(
+                    mock.patch.object(weyriva, "_diagnostic_command", return_value="/usr/bin/tool")
+                )
+                stack.enter_context(
+                    mock.patch.object(weyriva, "_run_diagnostic_command", return_value=(0, ""))
+                )
+                stack.enter_context(mock.patch.object(weyriva, "greeter_identity", return_value=(980, 980)))
+                for name, value in (
+                    ("SESSION_ENTRY", session_entry),
+                    ("GREETD_TEMPLATE", greetd_template),
+                    ("GREETER_ENV", greeter_environment),
+                    ("GREETER_SESSION", greeter_session),
+                    ("PACKAGED_SHELL_ROOT", packaged_shell),
+                    ("PACKAGED_GREETER_ROOT", packaged_greeter),
+                    ("PACKAGED_CONFIG_ROOT", packaged_config),
+                    ("PACKAGED_DATA_ROOT", packaged_data),
+                    ("PACKAGED_UNIT_ROOT", packaged_units),
+                    ("GREETD_PAM", greetd_pam),
+                    ("GREETD_CONFIG", greetd_config),
+                    ("GREETER_STATE_DIR", greeter_state),
+                    ("GREETER_PRIVATE_DIRS", (greeter_state / "state",)),
+                    ("DISPLAY_MANAGER_LINK", display_manager),
+                ):
+                    stack.enter_context(mock.patch.object(weyriva, name, value))
+                stack.enter_context(
+                    mock.patch.dict(
+                        weyriva.os.environ,
+                        {"WEYRIVA_STARTUP_TIMESTAMP": timestamp},
+                        clear=False,
+                    )
+                )
+                yield {
+                    "home": home,
+                    "niri_config": niri_config,
+                    "packaged_niri": packaged_niri,
+                    "niri_backup": niri_backup,
+                    "uid": 1001,
+                    "gid": 1002,
+                }
+
     def test_greetd_pam_requires_active_session_rule(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             pam = Path(temporary) / "greetd"
@@ -858,17 +1013,110 @@ class SessionLifecycleTests(unittest.TestCase):
             pam.write_text("auth include system-login\nsession include system-login\n")
             weyriva.validate_greetd_pam(pam)
 
-    def test_startup_file_backup_is_idempotent(self) -> None:
+    def test_exact_legacy_component_units_are_moved_but_similar_units_remain(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = root / "source"
-            destination = root / "destination"
-            backup = root / "backup"
-            source.write_text("new\n")
-            destination.write_text("old\n")
-            self.assertTrue(weyriva.reconcile_startup_file(source, destination, backup))
-            self.assertEqual(backup.read_text(), "old\n")
-            self.assertFalse(weyriva.reconcile_startup_file(source, destination, backup))
+            unit_root = root / "units"
+            backup_root = root / "backup"
+            unit_root.mkdir()
+            exact = {
+                "weyriva-waybar.service":
+                    "ExecStart=%h/.local/bin/weyriva component waybar\n",
+                "weyriva-mako.service":
+                    "ExecStart=%h/.local/bin/weyriva component mako\n",
+            }
+            for name, content in exact.items():
+                (unit_root / name).write_text(content)
+            unknown = unit_root / "weyriva-waybar-custom.service"
+            unknown.write_text(
+                "ExecStart=%h/.local/bin/weyriva component waybar\n"
+            )
+            near_marker = unit_root / "weyriva-wallpaper.service"
+            near_marker.write_text(
+                "ExecStart=%h/.local/bin/weyriva component wallpaper\n"
+            )
+
+            found = weyriva.legacy_user_units(unit_root)
+            self.assertEqual(
+                found,
+                ("weyriva-waybar.service", "weyriva-mako.service"),
+            )
+            moved = weyriva.back_up_legacy_user_units(
+                unit_root, backup_root, found
+            )
+            self.assertEqual(moved, found)
+            for name, content in exact.items():
+                self.assertFalse((unit_root / name).exists())
+                self.assertEqual((backup_root / name).read_text(), content)
+            self.assertTrue(unknown.is_file())
+            self.assertTrue(near_marker.is_file())
+
+    def test_changed_user_niri_is_planned_backed_up_replaced_and_owned(self) -> None:
+        with self._startup_fixture(user_config="changed") as fixture:
+            plan = weyriva.preflight_startup_chain("tester")
+            self.assertEqual(plan.niri_config, fixture["niri_config"])
+            self.assertEqual(plan.niri_backup, fixture["niri_backup"])
+            self.assertTrue(plan.niri_changed)
+            with (
+                mock.patch.object(weyriva, "ensure_greeter_state_directory"),
+                mock.patch.object(weyriva, "back_up_legacy_user_units", return_value=()),
+                mock.patch.object(weyriva, "_chown_tree"),
+                mock.patch.object(weyriva, "_run_checked"),
+                mock.patch.object(weyriva.os, "chown") as chown,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(weyriva.ensure_startup_chain("tester"), 0)
+
+            self.assertEqual(
+                fixture["niri_config"].read_bytes(),
+                fixture["packaged_niri"].read_bytes(),
+            )
+            self.assertEqual(
+                fixture["niri_backup"].read_bytes(),
+                b"old user niri\n",
+            )
+            expected_paths = (
+                fixture["home"] / ".config",
+                fixture["niri_config"].parent,
+                fixture["niri_config"],
+            )
+            self.assertEqual(
+                [call.args[0] for call in chown.call_args_list],
+                list(expected_paths),
+            )
+            for call in chown.call_args_list:
+                self.assertEqual(call.args[1:3], (fixture["uid"], fixture["gid"]))
+                self.assertEqual(call.kwargs, {"follow_symlinks": False})
+
+    def test_identical_user_niri_is_idempotent_without_backup(self) -> None:
+        with self._startup_fixture(user_config="identical") as fixture:
+            plan = weyriva.preflight_startup_chain("tester")
+            self.assertFalse(plan.niri_changed)
+            self.assertFalse(
+                weyriva.reconcile_startup_file(
+                    fixture["packaged_niri"],
+                    fixture["niri_config"],
+                    fixture["niri_backup"],
+                )
+            )
+            self.assertFalse(fixture["niri_backup"].exists())
+
+    def test_unsafe_niri_targets_and_backup_collision_are_rejected(self) -> None:
+        for user_config, pattern in (
+            ("symlink", "unsafe Niri configuration destination"),
+            ("directory", "unsafe Niri configuration destination"),
+        ):
+            with self.subTest(user_config=user_config):
+                with self._startup_fixture(user_config=user_config):
+                    with self.assertRaisesRegex(RuntimeError, pattern):
+                        weyriva.preflight_startup_chain("tester")
+        with self._startup_fixture(
+            user_config="changed", backup_collision=True
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "startup backup destination already exists"
+            ):
+                weyriva.preflight_startup_chain("tester")
 
     def test_unlocked_session_is_the_only_successful_reconciliation(self) -> None:
         runner = mock.Mock(return_value=self._completed(stdout="no\n"))

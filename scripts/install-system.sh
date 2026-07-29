@@ -59,13 +59,20 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 target_home=$(getent passwd "$TARGET_USER" | cut -d: -f6)
 [[ $target_home == /* && -d $target_home && ! -L $target_home ]] ||
     fail "the desktop user home is unavailable or unsafe: $target_home"
-effective_niri_config="$ROOT/config/niri/config.kdl"
 user_niri_config="$target_home/.config/niri/config.kdl"
-if [[ -f $user_niri_config ]]; then
-    effective_niri_config=$user_niri_config
-fi
+[[ ! -L $user_niri_config ]] ||
+    fail "refusing to replace symlink: $user_niri_config"
+[[ ! -e $user_niri_config || -f $user_niri_config ]] ||
+    fail "destination is not a regular file: $user_niri_config"
 niri validate -c "$ROOT/config/niri/config.kdl"
-niri validate -c "$effective_niri_config"
+if [[ -f $user_niri_config ]]; then
+    niri validate -c "$user_niri_config"
+fi
+niri_config_changed=true
+if [[ -f $user_niri_config ]] &&
+    cmp -s "$ROOT/config/niri/config.kdl" "$user_niri_config"; then
+    niri_config_changed=false
+fi
 unit_verify_dir=$(mktemp -d /tmp/weyriva-systemd-verify.XXXXXX)
 chmod 0755 "$unit_verify_dir"
 install -m 0755 "$ROOT/bin/weyriva" "$unit_verify_dir/weyriva"
@@ -160,10 +167,16 @@ for directory in state cache config; do
     validate_directory_destination "/var/lib/weyriva-greeter/$directory"
 done
 validate_directory_destination "$target_home/.config/systemd/user"
+validate_file_destination "$ROOT/config/niri/config.kdl" "$user_niri_config"
 validate_safe_parent "$target_home/.local/state/weyriva/startup-backups/placeholder"
 startup_backup_root="$target_home/.local/state/weyriva/startup-backups/$INSTALL_TIMESTAMP"
 [[ ! -e $startup_backup_root && ! -L $startup_backup_root ]] ||
     fail "startup backup destination already exists: $startup_backup_root"
+user_niri_backup="$startup_backup_root/niri/config.kdl"
+if [[ $niri_config_changed == true && -e $user_niri_config ]]; then
+    [[ ! -e $user_niri_backup && ! -L $user_niri_backup ]] ||
+        fail "startup backup destination already exists: $user_niri_backup"
+fi
 validate_safe_parent "$BACKUP_ROOT/placeholder"
 [[ ! -e $BACKUP_ROOT && ! -L $BACKUP_ROOT ]] ||
     fail "system backup destination already exists: $BACKUP_ROOT"
@@ -229,5 +242,15 @@ done
 
 WEYRIVA_STARTUP_TIMESTAMP="$INSTALL_TIMESTAMP" \
     /usr/bin/weyriva startup ensure --user "$TARGET_USER"
+user_runtime_dir="/run/user/$target_uid"
+user_bus="$user_runtime_dir/bus"
+if [[ -d $user_runtime_dir && ! -L $user_runtime_dir &&
+    -S $user_bus && ! -L $user_bus ]]; then
+    if ! runuser -u "$TARGET_USER" -- \
+        env XDG_RUNTIME_DIR="$user_runtime_dir" \
+        systemctl --user daemon-reload; then
+        fail "failed to reload the active user manager for $TARGET_USER"
+    fi
+fi
 printf 'System files installed for %s; greeter uid %s gid %s; greetd enabled for next boot and not restarted.\n' \
     "$TARGET_USER" "$greeter_uid" "$greeter_gid"

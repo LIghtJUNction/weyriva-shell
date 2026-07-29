@@ -64,8 +64,14 @@ REQUIRED_WALLPAPERS: Final = (
 )
 SESSION_ID_PATTERN: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 LEGACY_UNIT_MARKERS: Final = {
-    "weyriva-waybar.service": ("ExecStart=/usr/bin/waybar",),
-    "weyriva-mako.service": ("ExecStart=/usr/bin/mako",),
+    "weyriva-waybar.service": (
+        "ExecStart=/usr/bin/waybar",
+        "ExecStart=%h/.local/bin/weyriva component waybar",
+    ),
+    "weyriva-mako.service": (
+        "ExecStart=/usr/bin/mako",
+        "ExecStart=%h/.local/bin/weyriva component mako",
+    ),
     "weyriva-wallpaper.service": ("ExecStart=%h/.local/bin/weyriva wallpaper",),
     "weyriva-idle.service": ("ExecStart=%h/.local/bin/weyriva idle",),
     "weyriva-ipc.service": (
@@ -142,6 +148,8 @@ class StartupPlan:
     greeter_uid: int
     greeter_gid: int
     backup_root: Path
+    niri_backup: Path
+    niri_changed: bool
     greetd_backup: Path
     greetd_changed: bool
     unit_root: Path
@@ -471,19 +479,39 @@ def preflight_startup_chain(target_user: str) -> StartupPlan:
 
     user_home = Path(account.pw_dir)
     validate_safe_directory_chain(user_home, require_leaf=True)
-    user_environment = {
-        "HOME": str(user_home),
-        "XDG_CONFIG_HOME": str(user_home / ".config"),
-    }
-    config = niri_config_path(user_environment)
-    code, output = _run_diagnostic_command(["niri", "validate", "-c", str(config)])
+    packaged_niri_config = PACKAGED_CONFIG_ROOT / "niri/config.kdl"
+    if packaged_niri_config.is_symlink() or not packaged_niri_config.is_file():
+        raise RuntimeError(
+            f"packaged Niri config is unavailable or unsafe: {packaged_niri_config}"
+        )
+    config = user_home / ".config/niri/config.kdl"
+    validate_safe_directory_chain(config.parent)
+    if config.is_symlink() or (config.exists() and not config.is_file()):
+        raise RuntimeError(f"unsafe Niri configuration destination: {config}")
+    code, output = _run_diagnostic_command(
+        ["niri", "validate", "-c", str(packaged_niri_config)]
+    )
     if code != 0:
-        raise RuntimeError(f"Niri config is invalid ({config}): {output or 'validation failed'}")
+        raise RuntimeError(
+            "packaged Niri config is invalid "
+            f"({packaged_niri_config}): {output or 'validation failed'}"
+        )
+    if config.is_file():
+        code, output = _run_diagnostic_command(["niri", "validate", "-c", str(config)])
+        if code != 0:
+            raise RuntimeError(
+                f"Niri config is invalid ({config}): {output or 'validation failed'}"
+            )
+    niri_changed = (
+        not config.is_file()
+        or config.read_bytes() != packaged_niri_config.read_bytes()
+    )
 
     timestamp = os.environ.get("WEYRIVA_STARTUP_TIMESTAMP") or time.strftime("%Y%m%d-%H%M%S")
     if re.fullmatch(r"\d{8}-\d{6}", timestamp) is None:
         raise RuntimeError("invalid Weyriva startup backup timestamp")
     backup_root = user_home / ".local/state/weyriva/startup-backups" / timestamp
+    niri_backup = backup_root / "niri/config.kdl"
     greetd_backup = backup_root / "greetd/config.toml"
     unit_root = user_home / ".config/systemd/user"
     validate_safe_directory_chain(unit_root)
@@ -499,6 +527,8 @@ def preflight_startup_chain(target_user: str) -> StartupPlan:
     backup_targets = [
         *(backup_root / "systemd/user" / name for name in units_to_back_up),
     ]
+    if niri_changed and config.exists():
+        backup_targets.append(niri_backup)
     display_manager_backup: Path | None = None
     if DISPLAY_MANAGER_LINK.exists() or DISPLAY_MANAGER_LINK.is_symlink():
         if not DISPLAY_MANAGER_LINK.is_symlink():
@@ -522,6 +552,8 @@ def preflight_startup_chain(target_user: str) -> StartupPlan:
         greeter_uid=greeter_uid,
         greeter_gid=greeter_gid,
         backup_root=backup_root,
+        niri_backup=niri_backup,
+        niri_changed=niri_changed,
         greetd_backup=greetd_backup,
         greetd_changed=greetd_changed,
         unit_root=unit_root,
@@ -543,6 +575,18 @@ def ensure_startup_chain(target_user: str) -> int:
             plan.greeter_uid,
             plan.greeter_gid,
         )
+    niri_changed = reconcile_startup_file(
+        PACKAGED_CONFIG_ROOT / "niri/config.kdl",
+        plan.niri_config,
+        plan.niri_backup,
+    )
+    for path in (
+        plan.user_home / ".config",
+        plan.niri_config.parent,
+        plan.niri_config,
+    ):
+        if path.exists():
+            os.chown(path, plan.user_uid, plan.user_gid, follow_symlinks=False)
     greetd_changed = reconcile_startup_file(
         GREETD_TEMPLATE,
         GREETD_CONFIG,
@@ -568,7 +612,10 @@ def ensure_startup_chain(target_user: str) -> int:
     )
 
     print(f"Weyriva Niri startup chain ensured for {plan.target_user}.")
-    print(f"Niri config: {plan.niri_config}")
+    print(
+        f"Niri config: {'updated' if niri_changed else 'already current'} "
+        f"({plan.niri_config})"
+    )
     print(f"greetd config: {'updated' if greetd_changed else 'already current'}")
     if moved_units:
         print("legacy user units backed up: " + ", ".join(moved_units))
