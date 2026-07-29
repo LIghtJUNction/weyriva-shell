@@ -20,6 +20,7 @@ pkgbase = weyriva-shell-git
 	depends = libnotify
 	provides = weyriva-shell
 	conflicts = weyriva-shell
+	options = !lto
 	source = git+https://github.com/LIghtJUNction/weyriva-shell.git
 	sha256sums = SKIP
 

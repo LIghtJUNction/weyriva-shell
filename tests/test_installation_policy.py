@@ -95,6 +95,8 @@ class InstallationPolicyTests(unittest.TestCase):
         self.assertIn("cargo build --release --locked", package)
         self.assertIn("-p weyriva", package)
         self.assertIn("-p weyriva-luau-host", package)
+        self.assertIn("options=('!lto')", package)
+        self.assertIn("\toptions = !lto\n", srcinfo)
         self.assertIn(
             'install -Dm755 target/release/weyriva "$pkgdir/usr/bin/weyriva"',
             package,

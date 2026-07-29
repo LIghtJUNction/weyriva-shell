@@ -8,6 +8,7 @@ url='https://github.com/LIghtJUNction/weyriva-shell'
 license=('MIT')
 depends=('systemd>=254' 'niri' 'greetd' 'quickshell>=0.3' 'cage' 'foot' 'noto-fonts' 'wl-clipboard' 'libnotify')
 makedepends=('git' 'rust>=1.88' 'cmake')
+options=('!lto')
 provides=('weyriva-shell')
 conflicts=('weyriva-shell')
 source=("git+${url}.git")
