@@ -20,6 +20,32 @@ sys.modules[LOADER.name] = weyriva
 LOADER.exec_module(weyriva)
 
 
+class InstallerTests(unittest.TestCase):
+    def test_canonical_installer_is_executable_and_uses_all_supported_managers(self) -> None:
+        installer = ROOT / "install.sh"
+        content = installer.read_text()
+        self.assertTrue(installer.is_file())
+        self.assertTrue(os.access(installer, os.X_OK))
+        for manager in ("pacman", "dnf", "apt-get", "zypper"):
+            self.assertIn(manager, content)
+        self.assertIn(
+            "pacman -S --noconfirm --needed niri waybar fuzzel mako swaybg foot noto-fonts",
+            content,
+        )
+
+    def test_canonical_installer_applies_forced_user_install_after_requirements(self) -> None:
+        content = (ROOT / "install.sh").read_text()
+        self.assertIn('scripts/install.sh" --apply --force', content)
+        self.assertLess(
+            content.index('command -v "$command_name"'),
+            content.index('scripts/install.sh" --apply --force'),
+        )
+
+    def test_aur_package_does_not_require_nerd_symbols(self) -> None:
+        package = (ROOT / "packaging/aur/PKGBUILD").read_text()
+        self.assertNotIn("ttf-nerd-fonts-symbols-mono", package)
+
+
 class ProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = weyriva.PluginRegistry({}, (), ())

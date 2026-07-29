@@ -17,8 +17,8 @@
   },
   "niri/window": {"max-length": 48, "icon": true, "format": "{title}"},
   "clock": {"format": "{:%a  ·  %d %b  ·  %H:%M}", "tooltip-format": "{calendar}"},
-  "network": {"format-wifi": "󰤨  {signalStrength}%", "format-ethernet": "󰈀  wired", "format-disconnected": "󰤭  offline", "tooltip-format": "{ifname}: {essid}"},
-  "pulseaudio": {"format": "{icon}  {volume}%", "format-muted": "󰖁  muted", "format-icons": ["󰕿", "󰖀", "󰕾"], "scroll-step": 5},
-  "battery": {"format": "{icon}  {capacity}%", "format-charging": "󰂄  {capacity}%", "format-icons": ["󰂎", "󰁺", "󰁼", "󰁾", "󰂀", "󰂂", "󰁹"]},
+  "network": {"format-wifi": "Wi-Fi  {signalStrength}%", "format-ethernet": "Ethernet", "format-disconnected": "Offline", "tooltip-format": "{ifname}: {essid}"},
+  "pulseaudio": {"format": "Audio  {volume}%", "format-muted": "Audio muted", "scroll-step": 5},
+  "battery": {"format": "Battery  {capacity}%", "format-charging": "Charging  {capacity}%"},
   "tray": {"spacing": 8}
 }

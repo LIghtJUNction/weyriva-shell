@@ -23,39 +23,45 @@ editorial wallpaper. The shared palette is ink `#141413`, ivory `#FAF9F5`, and
 cactus `#BCD1CA`; the original project artwork is inspired by an editorial
 hand-drawn language and is not affiliated with Anthropic.
 
-## Try it safely
+## Install
 
-The installer is a dry run unless `--apply` is given. It preserves conflicts; `--force` makes timestamped backups before replacement.
+Weyriva is a Linux Niri/Wayland shell, not a Windows or macOS desktop. Arch and
+CachyOS are the fully supported path. Fedora, Debian/Ubuntu, and openSUSE use
+their native package managers on a best-effort basis; if their repositories do
+not provide the required desktop packages, installation stops before any
+Weyriva configuration is copied.
 
-```bash
-./scripts/check.sh
-./scripts/install.sh
-./scripts/install.sh --apply
-```
-
-The default user install deliberately does not copy a Wayland session desktop entry and is not registered with a system display manager. Test it from a TTY with `~/.local/bin/weyriva session start`; Weyriva adds its own executable directory to the niri session's `PATH` so its startup commands remain reachable. The session expects `niri`, `waybar`, `fuzzel`, `mako`, `swaybg`, `foot`, Noto Sans, and Nerd Symbols fonts. Selecting **Weyriva Shell** in greetd requires the future system/AUR installation, which owns `/usr/bin/weyriva` and `/usr/share/wayland-sessions/weyriva.desktop`.
-
-### Updates and removal
+Run the one supported setup command from a checkout:
 
 ```bash
-./scripts/update.sh          # dry-run for a Git checkout
-./scripts/update.sh --apply
-./scripts/uninstall.sh       # dry-run; modified files are preserved
-./scripts/uninstall.sh --apply
+./install.sh
 ```
+
+It installs Niri, Waybar, fuzzel, mako, swaybg, Foot, and Noto Sans, then
+automatically makes timestamped backups and replaces the Weyriva-managed user
+files. There are no installer choices or configuration prompts. The installer
+does not enable or restart greetd or a graphical session. Weyriva has one
+intentional default; fork the project if you want to maintain a personalized
+variant.
+
+### Checkout maintenance
+
+The `scripts/update.sh` and `scripts/uninstall.sh` helpers are for maintainers
+working from a Git checkout. They retain their dry-run and preservation-first
+behavior.
 
 Applied user installs record installed paths and SHA-256 digests under `${XDG_STATE_HOME:-$HOME/.local/state}/weyriva`. Pre-existing files remain unowned even when their content is identical. Updates replace only files that still match their recorded digest; locally modified files are preserved. Obsolete owned files are removed only when unchanged, while modified obsolete files are preserved and released from management. Uninstall uses the same ownership rule and never guesses from the current checkout.
 
-For the future AUR package, update through your AUR helper. The current `packaging/aur/PKGBUILD` is a `weyriva-shell-git` scaffold; it has not been published to AUR. Generate `.SRCINFO` from that directory with `makepkg --printsrcinfo > .SRCINFO` before an AUR submission.
+The current `packaging/aur/PKGBUILD` is a `weyriva-shell-git` scaffold for
+maintainers; it has not been published to AUR. Generate `.SRCINFO` from that
+directory with `makepkg --printsrcinfo > .SRCINFO` before an AUR submission.
 
-### greetd
+### Advanced greetd maintenance
 
-Installing or changing a login manager is system-wide and can lock you out. Review `config/greetd/config.toml` first. The separate helper requires an existing system installation at `/usr/bin/weyriva`, root, and explicit application. It backs up an existing config and never enables or restarts greetd. Its session lookup remains `/usr/share/wayland-sessions`; per-user desktop entries are not claimed to work with greetd.
-
-```bash
-./scripts/install-greetd.sh
-sudo ./scripts/install-greetd.sh --apply
-```
+The installer intentionally does not manage a login manager. The separate
+`scripts/install-greetd.sh` helper is for maintainers repairing an existing
+system installation at `/usr/bin/weyriva`; review its template before using it.
+It backs up the prior configuration and never enables or restarts greetd.
 
 ## Control plane
 

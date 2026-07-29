@@ -12,6 +12,7 @@ printf '%s\n' '[check] Python unit tests'
 PYTHONPYCACHEPREFIX="$CHECK_TMP/pycache" python3 -m unittest discover -s "$ROOT/tests" -v
 
 printf '%s\n' '[check] Bash syntax'
+bash -n "$ROOT/install.sh"
 while IFS= read -r -d '' script; do bash -n "$script"; done < <(find "$ROOT/scripts" -name '*.sh' -type f -print0)
 
 printf '%s\n' '[check] JSON, TOML, INI, and desktop syntax'

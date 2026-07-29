@@ -7,7 +7,7 @@ test:
 	python3 -m unittest discover -s tests -v
 
 install:
-	./scripts/install.sh
+	./install.sh
 
 update:
 	./scripts/update.sh

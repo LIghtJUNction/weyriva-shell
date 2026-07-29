@@ -1,16 +1,16 @@
 # Weyriva Shell 中文简介
 
-Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 niri 组合的现代 Wayland 桌面环境。当前 0.1.0 是可运行的项目基础：包含 Waybar、fuzzel、mako、greetd/tuigreet 模板、壁纸、systemd 用户服务、IPC 与受信任本地插件机制，但尚不是经过广泛硬件和真实会话验证的完整桌面发行版。
+Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 niri 组合的现代 Wayland 桌面环境。它只支持 Linux 上的 Niri/Wayland，不适用于 Windows 或 macOS。Arch 和 CachyOS 是完整支持路径；Fedora、Debian/Ubuntu 与 openSUSE 通过各自的原生包管理器尽力支持。若仓库缺少必需桌面软件包，安装会在复制任何 Weyriva 配置前停止。
 
-用户安装器默认只预览，不会修改系统：
+从项目检出目录执行唯一的安装命令：
 
 ```bash
-./scripts/check.sh
-./scripts/install.sh
-./scripts/install.sh --apply
+./install.sh
 ```
 
-已有配置默认保留，即使内容完全相同也不会被认领；应用安装后会在 `${XDG_STATE_HOME:-$HOME/.local/state}/weyriva` 记录路径和 SHA-256。更新和卸载只处理仍与记录哈希一致的文件；已修改文件始终保留，过时文件则退出管理。源码用户安装不会复制登录会话条目，可从 TTY 运行 `~/.local/bin/weyriva session start` 测试。greetd 选择需要提供 `/usr/bin/weyriva` 与系统会话条目的系统/AUR 安装；其配置仍须单独审阅并显式应用。
+脚本会安装 Niri、Waybar、fuzzel、mako、swaybg、Foot 和 Noto Sans，随后自动为目标文件创建带时间戳的备份并替换为 Weyriva 配置。安装过程没有选项或个性化提示，也不会启用或重启 greetd 或图形会话。Weyriva 只提供一套默认方案；需要个性化请 Fork 后自行维护。
+
+`scripts/update.sh` 与 `scripts/uninstall.sh` 仅供从 Git 检出维护项目时使用，仍遵循预览与保留优先的行为。
 
 常用控制命令：
 
