@@ -107,11 +107,10 @@ class InstallerTests(unittest.TestCase):
                 "sudo",
                 f"printf 'sudo %s\\n' \"$*\" >>'{log}'\n"
                 "if [[ ${1:-} == pacman && ${2:-} == -S ]]; then\n"
-                "  for argument in \"$@\"; do\n"
-                "    if [[ $argument == quickshell ]]; then\n"
+                "  if [[ \" $* \" == *' quickshell '* ]]; then\n"
+                "    [[ $* == 'pacman -S --noconfirm --ask=4 --needed quickshell' ]] || exit 98\n"
                 f"      : >'{generic_installed}'\n"
-                "    fi\n"
-                "  done\n"
+                "  fi\n"
                 "fi\n"
                 "exit 0\n",
             )
@@ -150,7 +149,16 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertIn('run_as_root pacman -R --noconfirm "${blocking_packages[@]}"', content)
         self.assertIn("pacman -R --print --print-format '%n'", content)
-        self.assertIn("run_as_root pacman -S --noconfirm --needed quickshell", content)
+        replacement = (
+            "run_as_root pacman -S --noconfirm --ask=4 --needed quickshell"
+        )
+        self.assertIn(replacement, content)
+        # pacman's --ask value is a bit mask. Four is exactly the conflict
+        # question bit (1 << 2), so unrelated questions remain non-interactive.
+        self.assertEqual(4, 1 << 2)
+        self.assertIn("ALPM conflict bit (1 << 2)", content)
+        self.assertEqual(re.findall(r"--ask=(\d+)", content), ["4"])
+        self.assertNotIn("--ask=", content.split("pacman -R --noconfirm", 1)[0])
         self.assertIn("pacman -Qq | grep -Fx quickshell", content)
         self.assertNotIn("noctalia-qs", content)
         self.assertNotIn("pacman -Rns", content)
@@ -171,7 +179,7 @@ class InstallerTests(unittest.TestCase):
             "sudo pacman -R --noconfirm "
             "cachyos-niri-noctalia noctalia-shell"
         )
-        replacement = "sudo pacman -S --noconfirm --needed quickshell"
+        replacement = "sudo pacman -S --noconfirm --ask=4 --needed quickshell"
         removal_preflight = (
             "pacman -R --print --print-format %n "
             "cachyos-niri-noctalia noctalia-shell"
@@ -190,7 +198,17 @@ class InstallerTests(unittest.TestCase):
         self.assertLess(calls.index(preflight), calls.index(removal_preflight))
         self.assertLess(calls.index(removal_preflight), calls.index(removal))
         self.assertLess(calls.index(removal), calls.index(replacement))
-        self.assertNotIn("noctalia-qs", removal)
+        self.assertEqual(calls.count(replacement), 1)
+        removal_calls = [
+            line
+            for line in calls.splitlines()
+            if "pacman -R " in line
+        ]
+        self.assertGreater(len(removal_calls), 0)
+        self.assertTrue(
+            all("noctalia-qs" not in line for line in removal_calls),
+            "the provider must be replaced by the conflict transaction, not removed standalone",
+        )
         self.assertNotIn("-Rns", calls)
 
     def test_arch_generic_quickshell_consumer_is_preserved(self) -> None:
@@ -198,14 +216,21 @@ class InstallerTests(unittest.TestCase):
             ("greetd-dms-greeter-git", "noctalia-qs")
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("sudo pacman -S --noconfirm --needed quickshell", calls)
+        resolution = "pacman -Sp --print-format %n niri greetd quickshell cage foot noto-fonts"
+        dependencies = "sudo pacman -S --noconfirm --needed niri greetd cage foot noto-fonts"
+        replacement = "sudo pacman -S --noconfirm --ask=4 --needed quickshell"
+        preflight = (
+            "sudo " + str(ROOT / "scripts/install-system.sh")
+            + " --preflight --user tester"
+        )
+        for expected in (resolution, dependencies, replacement, preflight):
+            self.assertIn(expected, calls)
+        self.assertLess(calls.index(resolution), calls.index(dependencies))
+        self.assertLess(calls.index(dependencies), calls.index(replacement))
+        self.assertLess(calls.index(replacement), calls.index(preflight))
+        self.assertEqual(calls.count(replacement), 1)
         self.assertNotIn("sudo pacman -R", calls)
         self.assertNotIn("greetd-dms-greeter-git", calls)
-        self.assertIn(
-            "sudo " + str(ROOT / "scripts/install-system.sh")
-            + " --preflight --user tester",
-            calls,
-        )
 
     def test_system_installer_preflights_before_mutating(self) -> None:
         content = (ROOT / "scripts/install-system.sh").read_text()

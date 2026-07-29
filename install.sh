@@ -90,7 +90,8 @@ case ${managers[0]} in
                 fail 'the legacy shell package removal cannot be resolved.'
             run_as_root pacman -R --noconfirm "${blocking_packages[@]}"
         fi
-        run_as_root pacman -S --noconfirm --needed quickshell
+        # ALPM conflict bit (1 << 2): deterministically replace the provider in this transaction.
+        run_as_root pacman -S --noconfirm --ask=4 --needed quickshell
         pacman -Qq | grep -Fx quickshell >/dev/null 2>&1 ||
             fail 'generic quickshell package was not installed.'
         ;;
