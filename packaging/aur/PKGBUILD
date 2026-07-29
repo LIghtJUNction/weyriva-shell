@@ -2,11 +2,11 @@
 pkgname=weyriva-shell-git
 pkgver=0.1.0.r0.g0000000
 pkgrel=1
-pkgdesc='A composed niri desktop environment with IPC and plugins (Git version)'
+pkgdesc='A Noctalia-powered niri desktop environment with Weyriva IPC and plugins (Git version)'
 arch=('any')
 url='https://github.com/LIghtJUNction/weyriva-shell'
 license=('MIT')
-depends=('python' 'niri' 'waybar' 'fuzzel' 'mako' 'swaybg' 'swaylock' 'swayidle' 'greetd' 'greetd-tuigreet' 'foot' 'noto-fonts' 'gsimplecal' 'pavucontrol')
+depends=('python' 'systemd>=254' 'niri' 'greetd' 'noctalia' 'noctalia-greeter' 'foot' 'noto-fonts')
 makedepends=('git')
 provides=('weyriva-shell')
 conflicts=('weyriva-shell')
@@ -22,17 +22,16 @@ package() {
   cd weyriva-shell
   install -Dm755 bin/weyriva "$pkgdir/usr/bin/weyriva"
   install -Dm644 config/niri/config.kdl "$pkgdir/usr/share/weyriva/config/niri/config.kdl"
-  install -Dm644 config/waybar/config.jsonc "$pkgdir/usr/share/weyriva/config/waybar/config.jsonc"
-  install -Dm644 config/waybar/style.css "$pkgdir/usr/share/weyriva/config/waybar/style.css"
-  install -Dm644 config/fuzzel/fuzzel.ini "$pkgdir/usr/share/weyriva/config/fuzzel/fuzzel.ini"
-  install -Dm644 config/mako/config "$pkgdir/usr/share/weyriva/config/mako/config"
-  install -Dm644 config/swaylock/config "$pkgdir/usr/share/weyriva/config/swaylock/config"
+  install -Dm644 config/noctalia/config.toml "$pkgdir/usr/share/weyriva/config/noctalia/config.toml"
+  install -Dm644 config/noctalia/palettes/Weyriva.json "$pkgdir/usr/share/weyriva/config/noctalia/palettes/Weyriva.json"
   install -Dm644 config/greetd/config.toml "$pkgdir/usr/share/weyriva/greetd/config.toml"
-  install -Dm644 assets/wallpapers/weyriva-cactus.png "$pkgdir/usr/share/weyriva/wallpapers/weyriva-cactus.png"
-  install -Dm644 assets/wallpapers/weyriva-coral.svg "$pkgdir/usr/share/weyriva/wallpapers/weyriva-coral.svg"
+  install -Dm644 assets/wallpapers/weyriva-cactus.png "$pkgdir/usr/share/weyriva/wallpapers/light/weyriva-cactus.png"
+  install -Dm644 assets/wallpapers/weyriva-cactus-dark.png "$pkgdir/usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png"
   install -Dm644 user-share/wayland-sessions/weyriva.desktop "$pkgdir/usr/share/wayland-sessions/weyriva.desktop"
   install -Dm644 systemd/*.service -t "$pkgdir/usr/lib/systemd/user"
-  sed -i 's|%h/.local/bin/weyriva|/usr/bin/weyriva|g' "$pkgdir/usr/lib/systemd/user"/*.service
+  install -d "$pkgdir/usr/lib/systemd/user/niri.service.wants"
+  ln -s ../weyriva-ipc.service "$pkgdir/usr/lib/systemd/user/niri.service.wants/weyriva-ipc.service"
+  ln -s ../weyriva-shell.service "$pkgdir/usr/lib/systemd/user/niri.service.wants/weyriva-shell.service"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }

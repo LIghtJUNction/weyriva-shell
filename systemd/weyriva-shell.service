@@ -1,0 +1,16 @@
+[Unit]
+Description=Weyriva Noctalia shell engine
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+OnFailure=weyriva-session-failsafe.service
+StartLimitIntervalSec=30
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/weyriva shell run
+ExecStartPost=/usr/bin/weyriva shell reconcile-lock
+Restart=on-failure
+RestartSec=2
+RestartMode=direct

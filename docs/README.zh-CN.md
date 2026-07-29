@@ -1,56 +1,147 @@
 # Weyriva Shell 中文简介
 
-Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 niri 组合的现代 Wayland 桌面环境。它只支持 Linux 上的 Niri/Wayland，不适用于 Windows 或 macOS。Arch 和 CachyOS 是完整支持路径；Fedora、Debian/Ubuntu 与 openSUSE 通过各自的原生包管理器尽力支持。若仓库缺少必需桌面软件包，安装会在复制任何 Weyriva 配置前停止。
+Weyriva Shell 是一套以 Arch Linux 为首要目标、围绕 Niri 构建的零配置
+Wayland 桌面。它使用上游
+[Noctalia v5](https://github.com/noctalia-dev/noctalia) 负责完整桌面 Shell 和
+会话内锁屏，并使用 Noctalia Greeter 提供统一视觉的登录界面。
 
-从项目检出目录执行唯一的安装命令：
+greetd 不会被删除。它隐藏在 Weyriva 登录界面之后，只负责 VT/seat、PAM
+认证、用户身份切换和会话创建。Weyriva 不重写 PAM、不启用自动登录，并永久
+保留 TTY2 恢复通道。
+
+> **当前状态：** 仓库集成仍在验收中。一键源码安装入口已经存在，但登录链、
+> Arch/AUR 打包、官方/社区插件全量矩阵、无障碍、锁屏崩溃恢复，以及 XRY
+> 实机视觉和点击证据都必须通过后，才能称为可安装、已部署或完整交付。详见
+> [Noctalia 对标验收表](NOCTALIA_PARITY.md)。
+
+## 一体化范围
+
+Noctalia 统一负责：
+
+- 多显示器 bar、组件、托盘、任务栏、媒体、网络、蓝牙、电池和亮度；
+- Dock、启动器、控制中心、通知与历史、剪贴板、壁纸、OSD 和截图；
+- 设置与热重载、桌面/锁屏组件、空闲策略、锁屏和会话操作；
+- `plugin.toml` + 可信 Luau 的原生 v5 插件。
+
+Noctalia Greeter 是可见登录层；greetd 是隐藏的认证/会话 broker；Niri 是
+合成器。目标启动链为：
+
+```text
+display-manager → greetd → noctalia-greeter-session
+→ Weyriva session → Niri/systemd user session
+→ weyriva-shell.service + weyriva-ipc.service
+```
+
+Waybar、fuzzel、mako、swaybg、swaylock 和 swayidle 不得与 Noctalia 同时
+争用同一表面。
+
+## 视觉与交互
+
+- `apple-design` 用于功能层级、系统字体、材料、立即反馈、空间连续性和动效；
+- `anthropic-art` 只用于项目自有的壁纸、登录/锁屏插画和空状态；
+- 两者都是设计参考，不代表 Apple、Anthropic 或 Noctalia 的隶属或背书；
+- 默认使用壁纸动态取色、较忠于源图且降低饱和度的 `soft` 生成器、
+  light/dark 和固定时间表的 auto 模式；
+- 主题和壁纸采用确定性的 400ms 淡入淡出，不使用随机特效；
+- reduced-motion 关闭 Shell 位移动画，并保留短淡入淡出或完全关闭壁纸过渡。
+
+详细规范：
+
+- [设计系统](DESIGN_SYSTEM.md)
+- [主题](THEMING.md)
+- [动效](MOTION.md)
+- [无障碍](ACCESSIBILITY.md)
+
+## 零配置安装
+
+Weyriva 仅支持 Linux/Niri/Wayland。Arch 和 Arch 系是首要路径，
+Arch/AUR/systemd 是第一打包与服务目标。Fedora、Debian/Ubuntu 和
+openSUSE 只有在原生仓库具备兼容依赖时才尽力支持。
+
+从检出目录执行：
 
 ```bash
 ./install.sh
 ```
 
-脚本会安装 Niri、Waybar、fuzzel、mako、swaybg、swaylock、swayidle、Foot、Noto Sans 与 pavucontrol；Arch 系还会安装 gsimplecal，随后自动为目标文件创建带时间戳的备份并替换为 Weyriva 配置。安装过程没有选项或个性化提示，也不会启用或重启 greetd 或图形会话。Weyriva 只提供一套默认方案；需要个性化请 Fork 后自行维护。
+安装器不提问、不提供个性化选项，并在替换受管用户文件前创建时间戳备份。
+它不会静默重启当前图形会话。需要不同终端、合成器、认证架构、工作区模型或
+整体视觉策略时，请 Fork 并维护自己的发行版。
 
-`scripts/update.sh` 与 `scripts/uninstall.sh` 仅供从 Git 检出维护项目时使用，仍遵循预览与保留优先的行为。
+安装完成不等于实机验收完成。系统登录配置需要权限，必须在应用前审阅；
+完整步骤见 [测试与验收](TESTING.md)。
 
-常用控制命令：
+## Vibe-coding 默认操作
 
-```bash
-weyriva status
-weyriva diagnose
-weyriva diagnose --json
-sudo weyriva startup ensure
-weyriva ipc call weyriva.info
-weyriva ipc call weyriva.notifications.dnd
-weyriva ipc call weyriva.panel.toggle
-weyriva plugin list
-weyriva plugin validate examples/plugins/hello.json
-weyriva plugin reload
-weyriva ipc call weyriva.niri.outputs
-weyriva session lock
-weyriva wallpaper set ~/Pictures/wallpaper.png
-weyriva wallpaper status
+```text
+Mod+Space       启动器
+Mod+Return      Foot 终端
+Mod+V           剪贴板历史
+Mod+C           控制中心/系统状态
+Mod+N           免打扰
+Mod+Shift+T     light/dark 手动切换
+Mod+W           壁纸
+Mod+Shift+E     会话与恢复操作
+Mod+Shift+X     锁屏
+Print           区域截图
+Mod+H/J/K/L     焦点导航
+Mod+1/2/3       工作区
 ```
 
-`weyriva plugin validate` 在安装前校验插件清单并列出缺失的可执行文件;
-`weyriva plugin reload` 让运行中的守护进程重新扫描插件清单,无需重启。
-`weyriva.niri.outputs` 与 `weyriva.niri.windows` 通过统一 socket 返回 niri
-的显示器与窗口 JSON 状态,便于面板和脚本使用。
+详见 [开发者体验](DEVELOPER_EXPERIENCE.md)。
 
-`weyriva.notifications.dnd` 切换 mako 勿扰模式(默认绑定 Mod+N),也可用
-`--params '{"enabled": true}'` 显式开关;`weyriva.panel.toggle` 隐藏或显示
-Waybar(默认绑定 Mod+B),`weyriva.panel.reload` 重载其配置。
-Waybar 的时钟、网络、音频和电池均可点击，分别打开日历、NetworkManager、音频控制与电源详情；缺少图形工具时会在 Foot 中显示安全的只读回退信息。
-`weyriva wallpaper set` 在用户 XDG 配置下记录自定义壁纸并在用户服务可用时
-自动重启壁纸服务,`reset` 恢复自带壁纸。
+## Shell 与插件
 
-按 `Mod+Shift+X` 可立即锁屏。固定的空闲服务会在五分钟无操作、睡眠前与会话锁定事件时调用同一个 Weyriva 锁屏命令。
+`weyriva shell` 始终使用隔离的 Weyriva 配置、状态和数据目录：
 
-`weyriva diagnose` 只检查 Niri 桌面链路：Niri 与运行时依赖、配置语法、Wayland
-会话入口、greetd 登录配置、用户服务和当前 Niri 会话。发现登录链路缺失时返回非零
-退出码，适合在 TTY 或脚本中直接使用。
+```bash
+weyriva shell config validate
+weyriva shell msg status
+weyriva shell msg panel-toggle launcher
+weyriva shell msg theme-mode-get
+weyriva shell msg color-scheme-get
+weyriva shell msg session lock
+```
 
-`sudo weyriva startup ensure` 用于确保整条启动链完整：校验 Niri 配置、备份并安装
-greetd 配置、备份已识别的旧 Weyriva 用户单元、保留用户自定义覆盖、刷新用户服务
-管理器并启用 greetd。该命令不会重启 greetd，也不会中断当前图形会话。
+当前 Noctalia v5 插件直接交给已安装的同一引擎：
 
-协议、插件安全模型和项目边界请阅读 [IPC](IPC.md)、[插件](PLUGINS.md)、[架构](ARCHITECTURE.md) 与 [路线图](ROADMAP.md)。项目中的珊瑚色、奶油色与墨色 SVG 为原创视觉资产；项目与 Anthropic 不存在隶属、背书或官方设计关系。
+```bash
+weyriva plugin list
+weyriva plugin install noctalia/screen_recorder
+weyriva plugin disable noctalia/screen_recorder
+weyriva plugin enable noctalia/screen_recorder
+weyriva plugin update official
+```
+
+`plugin install ID` 是 enable/materialize 的零配置别名。Noctalia v5 没有
+逐插件 remove；disable 不等于删除。旧 Weyriva JSON 可执行插件只保留在明确
+标注的 legacy 通道。Noctalia v4 QML 需要独立 Quickshell companion host，
+目前仍未实现、未兼容。详见 [插件](PLUGINS.md)。
+
+Weyriva 自己的本地 JSON IPC 与原生 Noctalia IPC 是两条不同通道：
+
+```bash
+weyriva diagnose
+weyriva diagnose --json
+weyriva ipc call weyriva.info
+weyriva ipc call weyriva.niri.outputs
+```
+
+详见 [IPC](IPC.md)。
+
+## 开发与验收
+
+```bash
+make test
+make check
+```
+
+本地检查通过不能代替真实登录、PAM、锁屏、按钮、日历、插件和 XRY 实机验收。
+
+开发文档入口：
+
+- [开发指南](DEVELOPMENT.md)
+- [架构](ARCHITECTURE.md)
+- [会话生命周期](SESSION_LIFECYCLE.md)
+- [测试与验收](TESTING.md)
+- [Noctalia 对标验收表](NOCTALIA_PARITY.md)

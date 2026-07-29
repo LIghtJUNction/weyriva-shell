@@ -21,16 +21,18 @@ cursor { xcursor-theme "Adwaita"; xcursor-size 24; }
 prefer-no-csd
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
-spawn-at-startup "systemctl" "--user" "start" "weyriva-ipc.service" "weyriva-waybar.service" "weyriva-mako.service" "weyriva-wallpaper.service" "weyriva-idle.service"
-
 binds {
-    Mod+Space { spawn "weyriva" "ipc" "call" "weyriva.launcher.open"; }
-    Mod+N { spawn "weyriva" "ipc" "call" "weyriva.notifications.dnd"; }
-    Mod+B { spawn "weyriva" "ipc" "call" "weyriva.panel.toggle"; }
-    Mod+Shift+X { spawn "weyriva" "session" "lock"; }
+    Mod+Space { spawn "weyriva" "shell" "msg" "panel-toggle" "launcher"; }
+    Mod+N { spawn "weyriva" "shell" "msg" "notification-dnd-toggle"; }
+    Mod+B { spawn "weyriva" "shell" "msg" "bar-toggle"; }
+    Mod+C { spawn "weyriva" "shell" "msg" "panel-toggle" "control-center"; }
+    Mod+V { spawn "weyriva" "shell" "msg" "panel-toggle" "clipboard"; }
+    Mod+W { spawn "weyriva" "shell" "msg" "panel-toggle" "wallpaper"; }
+    Mod+Shift+T { spawn "weyriva" "shell" "msg" "theme-mode-toggle"; }
+    Mod+Shift+E { spawn "weyriva" "shell" "msg" "panel-toggle" "session"; }
+    Mod+Shift+X { spawn "weyriva" "shell" "msg" "session" "lock"; }
     Mod+Return { spawn "foot"; }
     Mod+Q { close-window; }
-    Mod+Shift+E { quit; }
     Mod+H { focus-column-left; }
     Mod+L { focus-column-right; }
     Mod+J { focus-window-down; }
@@ -43,7 +45,7 @@ binds {
     Mod+Shift+1 { move-column-to-workspace 1; }
     Mod+Shift+2 { move-column-to-workspace 2; }
     Mod+Shift+3 { move-column-to-workspace 3; }
-    Print { screenshot; }
+    Print { spawn "weyriva" "shell" "msg" "screenshot-region"; }
 }
 
 window-rule {

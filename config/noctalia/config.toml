@@ -1,0 +1,122 @@
+[bar]
+order = [ "default" ]
+
+[bar.default]
+enabled = true
+position = "top"
+start = [ "launcher", "wallpaper", "workspaces" ]
+center = [ "clock" ]
+end = [
+    "tray",
+    "notifications",
+    "clipboard",
+    "network",
+    "bluetooth",
+    "volume",
+    "brightness",
+    "battery",
+    "settings",
+    "theme_mode",
+    "control-center",
+    "session",
+]
+
+[desktop_widgets]
+enabled = true
+
+[dock]
+enabled = true
+
+[idle.behavior.lock]
+action = "lock"
+enabled = true
+timeout = 300.0
+
+[idle.behavior.screen-off]
+action = "screen_off"
+enabled = true
+timeout = 360.0
+
+[idle.behavior.lock-and-suspend]
+action = "lock_and_suspend"
+enabled = false
+timeout = 900.0
+
+[lockscreen]
+enabled = true
+wallpaper = ""
+
+[lockscreen_widgets]
+enabled = true
+
+[notification]
+enable_daemon = true
+
+[osd]
+enabled = true
+
+[plugins]
+auto_update = true
+enabled = []
+
+[[plugins.source]]
+enabled = true
+kind = "git"
+location = "https://github.com/noctalia-dev/official-plugins"
+name = "official"
+
+[[plugins.source]]
+enabled = true
+kind = "git"
+location = "https://github.com/noctalia-dev/community-plugins"
+name = "community"
+
+[shell]
+clipboard_enabled = true
+corner_radius_scale = 0.9
+font_family = "Noto Sans"
+polkit_agent = true
+settings_show_advanced = true
+setup_wizard_enabled = false
+telemetry_enabled = false
+
+[shell.animation]
+enabled = true
+speed = 1.1
+
+[shell.greeter_sync]
+auto_sync = true
+
+[shell.panel]
+borders = true
+shadow = true
+transparency_mode = "soft"
+
+[shell.shadow]
+alpha = 0.42
+direction = "down"
+
+[location]
+auto_locate = false
+custom_schedule = true
+sunrise = "07:00"
+sunset = "19:00"
+
+[theme]
+custom_palette = "Weyriva"
+mode = "auto"
+source = "wallpaper"
+wallpaper_scheme = "soft"
+
+[wallpaper]
+directory = "~/.local/share/weyriva/wallpapers"
+directory_dark = "~/.local/share/weyriva/wallpapers/dark"
+directory_light = "~/.local/share/weyriva/wallpapers/light"
+enabled = true
+fill_mode = "crop"
+transition = [ "fade" ]
+transition_duration = 400
+transition_on_startup = true
+
+[wallpaper.default]
+path = "~/.local/share/weyriva/wallpapers/light/weyriva-cactus.png"

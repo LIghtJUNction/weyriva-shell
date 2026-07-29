@@ -26,9 +26,10 @@ from pathlib import Path
 root = Path(sys.argv[1])
 for path in (*root.rglob("*.json"), *root.rglob("*.jsonc")):
     json.loads(path.read_text(encoding="utf-8"))
-with (root / "config/greetd/config.toml").open("rb") as stream:
-    tomllib.load(stream)
-for relative in ("config/fuzzel/fuzzel.ini", "user-share/wayland-sessions/weyriva.desktop"):
+for path in root.rglob("*.toml"):
+    with path.open("rb") as stream:
+        tomllib.load(stream)
+for relative in ("user-share/wayland-sessions/weyriva.desktop",):
     parser = configparser.ConfigParser(interpolation=None)
     with (root / relative).open(encoding="utf-8") as stream:
         parser.read_file(stream)
@@ -44,22 +45,22 @@ if find "$INSTALL_HOME" -mindepth 1 -print -quit | grep -q .; then
 fi
 HOME="$INSTALL_HOME" XDG_CONFIG_HOME="$INSTALL_HOME/config" XDG_DATA_HOME="$INSTALL_HOME/data" "$ROOT/scripts/install.sh" --apply >/dev/null
 test ! -e "$INSTALL_HOME/data/wayland-sessions/weyriva.desktop"
-printf '%s\n' 'local customization' >"$INSTALL_HOME/config/fuzzel/fuzzel.ini"
+printf '%s\n' '# local customization' >>"$INSTALL_HOME/config/weyriva/noctalia/config.toml"
 HOME="$INSTALL_HOME" XDG_CONFIG_HOME="$INSTALL_HOME/config" XDG_DATA_HOME="$INSTALL_HOME/data" "$ROOT/scripts/install.sh" --apply >/dev/null
-grep -qx 'local customization' "$INSTALL_HOME/config/fuzzel/fuzzel.ini"
+grep -qx '# local customization' "$INSTALL_HOME/config/weyriva/noctalia/config.toml"
 
 printf '%s\n' '[check] Identical pre-existing files remain unowned'
 UNOWNED_HOME="$CHECK_TMP/unowned-home"
-mkdir -p "$UNOWNED_HOME/config/mako"
-cp "$ROOT/config/mako/config" "$UNOWNED_HOME/config/mako/config"
+mkdir -p "$UNOWNED_HOME/config/weyriva/noctalia"
+cp "$ROOT/config/noctalia/config.toml" "$UNOWNED_HOME/config/weyriva/noctalia/config.toml"
 UNOWNED_ENV=(env HOME="$UNOWNED_HOME" XDG_CONFIG_HOME="$UNOWNED_HOME/config" XDG_DATA_HOME="$UNOWNED_HOME/data" XDG_STATE_HOME="$UNOWNED_HOME/state")
 "${UNOWNED_ENV[@]}" "$ROOT/scripts/install.sh" --apply >/dev/null
-if grep -Fq "$UNOWNED_HOME/config/mako/config" "$UNOWNED_HOME/state/weyriva/installed-files.tsv"; then
+if grep -Fq "$UNOWNED_HOME/config/weyriva/noctalia/config.toml" "$UNOWNED_HOME/state/weyriva/installed-files.tsv"; then
     printf '%s\n' 'identical pre-existing file was incorrectly adopted' >&2
     exit 1
 fi
 "${UNOWNED_ENV[@]}" "$ROOT/scripts/uninstall.sh" --apply >/dev/null
-cmp -s "$ROOT/config/mako/config" "$UNOWNED_HOME/config/mako/config"
+cmp -s "$ROOT/config/noctalia/config.toml" "$UNOWNED_HOME/config/weyriva/noctalia/config.toml"
 
 printf '%s\n' '[check] Managed update and uninstall behavior'
 PROJECT_COPY="$CHECK_TMP/project"
@@ -68,23 +69,28 @@ MANAGED_HOME="$CHECK_TMP/managed-home"
 mkdir -p "$MANAGED_HOME"
 MANAGED_ENV=(env HOME="$MANAGED_HOME" XDG_CONFIG_HOME="$MANAGED_HOME/config" XDG_DATA_HOME="$MANAGED_HOME/data" XDG_STATE_HOME="$MANAGED_HOME/state")
 "${MANAGED_ENV[@]}" "$PROJECT_COPY/scripts/install.sh" --apply >/dev/null
-printf '%s\n' '# upstream update' >>"$PROJECT_COPY/config/fuzzel/fuzzel.ini"
+RETIRED_CONFIG="$MANAGED_HOME/config/waybar/style.css"
+mkdir -p "$(dirname "$RETIRED_CONFIG")"
+printf '%s\n' 'previously managed Waybar config' >"$RETIRED_CONFIG"
+RETIRED_HASH=$(sha256sum "$RETIRED_CONFIG" | cut -d ' ' -f 1)
+printf '%s\t%s\n' "$RETIRED_HASH" "$RETIRED_CONFIG" >>"$MANAGED_HOME/state/weyriva/installed-files.tsv"
+printf '%s\n' '# upstream update' >>"$PROJECT_COPY/config/noctalia/config.toml"
 printf '%s\n' '// local modification' >>"$MANAGED_HOME/config/niri/config.kdl"
-printf '%s\n' '# obsolete local modification' >>"$MANAGED_HOME/config/mako/config"
-rm -f "$PROJECT_COPY/config/mako/config" "$PROJECT_COPY/config/waybar/style.css"
+printf '%s\n' '  ' >>"$MANAGED_HOME/config/weyriva/noctalia/palettes/Weyriva.json"
+rm -f "$PROJECT_COPY/config/noctalia/palettes/Weyriva.json"
 "${MANAGED_ENV[@]}" "$PROJECT_COPY/scripts/install.sh" --apply >/dev/null
-grep -qx '# upstream update' "$MANAGED_HOME/config/fuzzel/fuzzel.ini"
+grep -qx '# upstream update' "$MANAGED_HOME/config/weyriva/noctalia/config.toml"
 grep -qx '// local modification' "$MANAGED_HOME/config/niri/config.kdl"
-test ! -e "$MANAGED_HOME/config/waybar/style.css"
-grep -qx '# obsolete local modification' "$MANAGED_HOME/config/mako/config"
-if grep -Fq "$MANAGED_HOME/config/mako/config" "$MANAGED_HOME/state/weyriva/installed-files.tsv" || grep -Fq "$MANAGED_HOME/config/waybar/style.css" "$MANAGED_HOME/state/weyriva/installed-files.tsv"; then
+test -e "$MANAGED_HOME/config/weyriva/noctalia/palettes/Weyriva.json"
+test ! -e "$RETIRED_CONFIG"
+if grep -Fq "$MANAGED_HOME/config/weyriva/noctalia/palettes/Weyriva.json" "$MANAGED_HOME/state/weyriva/installed-files.tsv" || grep -Fq "$RETIRED_CONFIG" "$MANAGED_HOME/state/weyriva/installed-files.tsv"; then
     printf '%s\n' 'obsolete files remained in the ownership manifest' >&2
     exit 1
 fi
 "${MANAGED_ENV[@]}" "$PROJECT_COPY/scripts/uninstall.sh" --apply >/dev/null
-test ! -e "$MANAGED_HOME/config/fuzzel/fuzzel.ini"
+test ! -e "$MANAGED_HOME/config/weyriva/noctalia/config.toml"
 grep -qx '// local modification' "$MANAGED_HOME/config/niri/config.kdl"
-grep -qx '# obsolete local modification' "$MANAGED_HOME/config/mako/config"
+test -e "$MANAGED_HOME/config/weyriva/noctalia/palettes/Weyriva.json"
 
 printf '%s\n' '[check] Repository text whitespace and final newlines'
 python3 - "$ROOT" <<'PY'
@@ -118,6 +124,28 @@ if command -v niri >/dev/null; then
     niri validate -c "$ROOT/config/niri/config.kdl"
 else
     printf '%s\n' '[skip] niri is not installed'
+fi
+
+if command -v systemd-analyze >/dev/null; then
+    printf '%s\n' '[check] systemd user units'
+    systemd-analyze --user verify "$ROOT"/systemd/*.service
+else
+    printf '%s\n' '[skip] systemd-analyze is not installed'
+fi
+
+if command -v noctalia >/dev/null; then
+    printf '%s\n' '[check] isolated Noctalia profile'
+    NOCTALIA_CHECK_CONFIG="$CHECK_TMP/noctalia-config"
+    NOCTALIA_CHECK_STATE="$CHECK_TMP/noctalia-state"
+    NOCTALIA_CHECK_DATA="$CHECK_TMP/noctalia-data"
+    mkdir -p "$NOCTALIA_CHECK_CONFIG/noctalia" "$NOCTALIA_CHECK_STATE" "$NOCTALIA_CHECK_DATA"
+    cp -a "$ROOT/config/noctalia/." "$NOCTALIA_CHECK_CONFIG/noctalia/"
+    NOCTALIA_CONFIG_HOME="$NOCTALIA_CHECK_CONFIG" \
+        NOCTALIA_STATE_HOME="$NOCTALIA_CHECK_STATE" \
+        NOCTALIA_DATA_HOME="$NOCTALIA_CHECK_DATA" \
+        noctalia config validate
+else
+    printf '%s\n' '[skip] noctalia is not installed'
 fi
 
 printf '%s\n' '[check] all required checks passed'

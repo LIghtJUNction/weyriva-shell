@@ -1,127 +1,156 @@
 # Weyriva Shell
 
-Weyriva Shell (pronounced **way-REE-vuh**) is an Arch Linux-first, composed Wayland desktop built around niri. It joins a warm editorial visual language with Waybar, fuzzel, mako, greetd/tuigreet, user services, a small IPC control plane, and trusted local plugins.
+Weyriva Shell (pronounced **way-REE-vuh**) is an Arch Linux-first,
+zero-configuration Niri desktop built around the upstream
+[Noctalia v5](https://github.com/noctalia-dev/noctalia) shell. One visual and
+lifecycle contract covers the login screen, authenticated lock screen, and
+desktop.
 
-> **Status:** version 0.1.0 is a working repository foundation, not a finished desktop distribution. Its runtime, tests, preservation-first installer, and static configuration ship now. Full hardware coverage, a graphical settings app, broad plugin ecosystem, stable AUR release, and real-session qualification remain roadmap work. This repository does not claim that Weyriva is installed or validated in your current desktop session.
+Noctalia Greeter is the visible login layer. greetd remains underneath as the
+hidden, narrowly scoped broker for VT ownership, PAM authentication, account
+transition, and session creation. Weyriva does not reimplement PAM, enable
+autologin, or remove the TTY recovery path.
 
-The original coral/cream/ink artwork is a project-owned editorial design. Weyriva is not affiliated with, endorsed by, or presented as artwork from Anthropic.
+> **Status:** repository integration is active. A one-command source installer
+> exists, but the all-in-one login chain, packaged dependency path, complete
+> plugin catalogs, accessibility matrix, crash/lock recovery, and XRY visual and
+> click acceptance must pass before this project is called install-ready or
+> deployed. See the [parity ledger](docs/NOCTALIA_PARITY.md).
 
-## Components
+## What it delivers
 
-- niri scrolling compositor and session
-- Waybar panel, fuzzel launcher, mako notification daemon (the requested “moko” is treated as the real Arch package `mako`)
-- greetd with tuigreet as an explicit, separate system template
-- `weyriva` Python standard-library CLI and protocol-v1 Unix-socket daemon
-- explicit-manifest executable plugins under XDG config/data paths
-- original cactus editorial PNG wallpaper and graphical-session-bound systemd user services
+- Noctalia-owned bar, tray, launcher, dock, control center, notifications,
+  clipboard, wallpaper, OSD, settings, screenshots, lock/idle, desktop widgets,
+  and current v5 plugins;
+- Noctalia Greeter for a visually continuous login surface, with greetd hidden
+  behind the Weyriva product boundary;
+- one Niri/systemd user-session lifecycle with bounded shell recovery;
+- light, dark, and deterministic automatic mode with source-faithful,
+  gently saturated wallpaper-derived color;
+- Apple-inspired interaction hierarchy and motion, paired with project-owned
+  Anthropic-inspired editorial wallpaper and illustration;
+- keyboard-first vibe-coding defaults for terminal, launcher, workspaces,
+  clipboard, DND, theme, screenshots, status, and recovery;
+- one fixed profile and no installer personalization questionnaire.
 
-## Visual system
-
-The default desktop uses a compact ivory Waybar rail, calm ivory launcher and
-notifications, and cactus focus and selection states over the bundled cactus
-editorial wallpaper. The shared palette is ink `#141413`, ivory `#FAF9F5`, and
-cactus `#BCD1CA`; the original project artwork is inspired by an editorial
-hand-drawn language and is not affiliated with Anthropic.
+These are design influences, not endorsements. Weyriva is not affiliated with
+or sponsored by Apple, Anthropic, or Noctalia.
 
 ## Install
 
-Weyriva is a Linux Niri/Wayland shell, not a Windows or macOS desktop. Arch and
-CachyOS are the fully supported path. Fedora, Debian/Ubuntu, and openSUSE use
-their native package managers on a best-effort basis; if their repositories do
-not provide the required desktop packages, installation stops before any
-Weyriva configuration is copied.
+Weyriva targets Linux/Niri/Wayland. Arch and Arch-family systems are primary,
+with AUR/systemd as the first packaging and service path. Fedora,
+Debian/Ubuntu, and openSUSE remain best effort where their repositories provide
+compatible Niri, Noctalia, Noctalia Greeter, greetd, and supporting packages.
 
-Run the one supported setup command from a checkout:
+From a checkout, the supported command is:
 
 ```bash
 ./install.sh
 ```
 
-It installs Niri, Waybar, fuzzel, mako, swaybg, swaylock, swayidle, Foot, Noto
-Sans, and pavucontrol; Arch-family systems also receive gsimplecal. It then
-automatically makes timestamped backups and replaces the Weyriva-managed user
-files. There are no installer choices or configuration prompts. The installer
-does not enable or restart greetd or a graphical session. Weyriva has one
-intentional default; fork the project if you want to maintain a personalized
-variant.
+The installer has no choices. It preserves replaced managed user files with
+timestamped backups and does not silently restart the active graphical session.
+Arch installation prefers configured repositories and may use an
+already-installed `paru` or `yay` as the invoking ordinary user; it does not
+bootstrap an AUR helper.
 
-### Checkout maintenance
+The installer applies the fixed privileged login template without questions,
+backs up the previous template, enables the login service for the next boot,
+and never restarts the active graphical session. The packaged path installs the
+Noctalia Greeter session and keeps greetd as an internal broker. Until the
+gates in [Testing](docs/TESTING.md) pass, do not treat a successful file copy
+as a successful desktop deployment.
 
-The `scripts/update.sh` and `scripts/uninstall.sh` helpers are for maintainers
-working from a Git checkout. They retain their dry-run and preservation-first
-behavior.
+## Everyday controls
 
-Applied user installs record installed paths and SHA-256 digests under `${XDG_STATE_HOME:-$HOME/.local/state}/weyriva`. Pre-existing files remain unowned even when their content is identical. Updates replace only files that still match their recorded digest; locally modified files are preserved. Obsolete owned files are removed only when unchanged, while modified obsolete files are preserved and released from management. Uninstall uses the same ownership rule and never guesses from the current checkout.
+```text
+Mod+Space       launcher
+Mod+Return      terminal
+Mod+V           clipboard history
+Mod+C           control center
+Mod+N           Do Not Disturb
+Mod+Shift+T     light/dark override
+Mod+W           wallpaper
+Mod+Shift+E     session and recovery actions
+Mod+Shift+X     lock
+Print           region screenshot
+Mod+H/J/K/L     focus navigation
+Mod+1/2/3       workspaces
+```
 
-The current `packaging/aur/PKGBUILD` is a `weyriva-shell-git` scaffold for
-maintainers; it has not been published to AUR. Generate `.SRCINFO` from that
-directory with `makepkg --printsrcinfo > .SRCINFO` before an AUR submission.
+The exact workflow is in
+[Developer experience](docs/DEVELOPER_EXPERIENCE.md).
 
-### Advanced greetd maintenance
+## Shell and plugin control
 
-The installer intentionally does not manage a login manager. The separate
-`scripts/install-greetd.sh` helper is for maintainers repairing an existing
-system installation at `/usr/bin/weyriva`; review its template before using it.
-It backs up the prior configuration and never enables or restarts greetd.
-
-## Control plane
+`weyriva shell` always carries the isolated Weyriva config, state, and data
+roots:
 
 ```bash
-weyriva daemon
+weyriva shell run
+weyriva shell config validate
+weyriva shell msg status
+weyriva shell msg panel-toggle launcher
+weyriva shell msg settings-toggle
+weyriva shell msg theme-mode-get
+weyriva shell msg color-scheme-get
+weyriva shell msg session lock
+```
+
+Current Noctalia v5 plugins run directly through the installed engine:
+
+```bash
+weyriva plugin list
+weyriva plugin install noctalia/screen_recorder
+weyriva plugin disable noctalia/screen_recorder
+weyriva plugin enable noctalia/screen_recorder
+weyriva plugin update official
+weyriva plugin source list
+```
+
+`plugin install ID` is an enable/materialize convenience. Noctalia v5 exposes
+disable, not per-plugin removal. The old Weyriva JSON executable lane remains
+explicitly legacy, and Noctalia v4 QML compatibility remains pending. See
+[Plugins](docs/PLUGINS.md).
+
+Weyriva's reserved local control plane is separate:
+
+```bash
 weyriva status
 weyriva diagnose
 weyriva diagnose --json
-sudo weyriva startup ensure
 weyriva ipc call weyriva.info
-weyriva ipc call weyriva.methods
-weyriva ipc call weyriva.launcher.open
-weyriva ipc call weyriva.notifications.dnd
-weyriva ipc call weyriva.panel.toggle
-weyriva plugin list
-weyriva plugin validate examples/plugins/hello.json
-weyriva plugin reload
 weyriva ipc call weyriva.niri.outputs
-weyriva session lock
-weyriva wallpaper set ~/Pictures/wallpaper.png
-weyriva wallpaper status
-weyriva wallpaper reset
 ```
 
-`weyriva ipc call weyriva.notifications.dnd` toggles mako do-not-disturb (bound to
-Mod+N in the packaged niri config); pass `--params '{"enabled": true}'` to set it
-explicitly. `weyriva.panel.toggle` hides or shows Waybar (Mod+B) and
-`weyriva.panel.reload` reloads its configuration. `weyriva wallpaper set` records a
-per-user wallpaper override under XDG config, restarts the wallpaper service when a
-user service manager is available, and `reset` returns to the bundled cactus
-artwork. The primary session shortcuts are Mod+Space (launcher), Mod+Return
-(terminal), Mod+B (panel), Mod+N (do-not-disturb), Mod+Shift+X (lock), and Print
-(screenshot). The fixed idle lifecycle locks after five minutes, before sleep, and
-when the session lock event is emitted.
-
-The Waybar clock, network, audio, and battery controls are clickable: they open
-the calendar, NetworkManager controls, audio controls, and power details. When a
-graphical helper is unavailable, Weyriva opens a readable Foot fallback instead.
-
-`weyriva diagnose` is the Niri-only health check for the compositor, session entry,
-greetd login path, required desktop commands, user services, and the current Niri
-socket. It exits non-zero when a required login component is missing, so it can be
-used directly from shell scripts.
-
-`sudo weyriva startup ensure` validates the selected Niri config, installs the
-packaged greetd template with a timestamped backup, backs up recognized legacy
-Weyriva user units while preserving custom overrides, reloads the user service
-manager, and enables greetd. It never restarts greetd or the current graphical
-session.
-
-Read [IPC](docs/IPC.md), [plugins](docs/PLUGINS.md), [architecture](docs/ARCHITECTURE.md), and the [roadmap](docs/ROADMAP.md). A concise Chinese introduction is in [docs/README.zh-CN.md](docs/README.zh-CN.md).
-
-## Development
+## Development and acceptance
 
 ```bash
+make test
 make check
 ```
 
-CI runs the same check suite. Optional `shellcheck` and niri configuration validation run when their tools are installed and otherwise report explicit skips.
+CI/local checks do not replace real login, lock, pointer, keyboard, plugin, or
+XRY acceptance.
+
+Developer documentation:
+
+- [Development](docs/DEVELOPMENT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Session lifecycle](docs/SESSION_LIFECYCLE.md)
+- [Design system](docs/DESIGN_SYSTEM.md)
+- [Theming](docs/THEMING.md)
+- [Motion](docs/MOTION.md)
+- [Accessibility](docs/ACCESSIBILITY.md)
+- [Developer experience](docs/DEVELOPER_EXPERIENCE.md)
+- [IPC](docs/IPC.md)
+- [Plugins](docs/PLUGINS.md)
+- [Testing](docs/TESTING.md)
+- [Noctalia parity](docs/NOCTALIA_PARITY.md)
+
+A concise Chinese overview is in
+[docs/README.zh-CN.md](docs/README.zh-CN.md).
 
 ## License
 

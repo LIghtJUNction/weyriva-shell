@@ -1,0 +1,9 @@
+[Unit]
+Description=Exit a failed Weyriva graphical session
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/niri msg action quit --skip-confirmation

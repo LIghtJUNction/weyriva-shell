@@ -6,6 +6,6 @@ Requisite=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/weyriva daemon
+ExecStart=/usr/bin/weyriva daemon
 Restart=on-failure
 RestartSec=1

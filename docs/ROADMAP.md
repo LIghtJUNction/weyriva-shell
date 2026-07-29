@@ -1,23 +1,55 @@
 # Status and roadmap
 
-## 0.1 foundation (implemented)
+Weyriva is moving from a collection of separate desktop components to one
+Noctalia-powered Niri session. Milestones remain incomplete until their runtime
+acceptance gates pass.
 
-- Composed niri session configuration and desktop assets
-- Waybar, fuzzel, mako, wallpaper, session entry, and user-service defaults
-- Versioned local IPC with bounded framing and structured errors
-- Explicit trusted-plugin manifests, timeout enforcement, and tests
-- Session control methods: do-not-disturb, panel toggle/reload, method introspection, and per-user wallpaper overrides
-- Plugin lifecycle tooling: manifest validation, live daemon reload, and niri output/window queries over IPC
-- Digest-tracked, preservation-first user installer and separate greetd template installer
-- `weyriva-shell-git` AUR packaging scaffold and CI checks
+## Current foundation
 
-## Before calling the shell complete
+- Noctalia v5 is the sole desktop-shell engine for the bar, launcher, panels,
+  notifications, wallpaper, OSD, lock screen, settings, and native Luau plugins.
+- Weyriva keeps an isolated Noctalia profile and its versioned `weyriva.*` IPC
+  namespace for compatibility with trusted executable plugins.
+- Noctalia Greeter is the visible login surface; greetd remains the internal PAM
+  and VT broker.
+- Niri owns the graphical-session lifecycle through systemd user units, with
+  bounded shell restart, lock reconciliation, and session-exit failsafe design.
+- The root one-command installer and AUR scaffold are the system installation
+  paths. The user-only installer manages profile data and does not install
+  service overrides.
+- Light and dark editorial assets, wallpaper-derived color, deterministic theme
+  scheduling, and a complete offline fallback palette are present in source.
 
-- Qualify complete login/logout, suspend, multi-monitor, HiDPI, audio, network, and accessibility flows on real systems
-- Add settings and recovery surfaces that do not require hand-editing configuration
-- Define plugin compatibility policy, lifecycle hooks, and permission visibility
-- Build upgrade/migration tests across tagged releases
-- Publish and maintain the AUR package after repository releases are stable
-- Expand theme variants without losing the compact editorial design language
+## Acceptance milestones
 
-Items in the second list are planned, not present capabilities.
+1. **Noctalia v5 shell and native plugin integration**
+   - Complete the full settings/surface parity audit.
+   - Validate official and community plugin lifecycle behavior against pinned
+     upstream catalogs.
+
+2. **Login, lock, and desktop lifecycle**
+   - Validate the Noctalia Greeter → greetd → Weyriva → Niri chain on supported
+     distributions.
+   - Qualify crash-loop recovery, locked-shell restart, TTY2 recovery, logout,
+     suspend, multi-monitor, and HiDPI behavior on real hardware.
+
+3. **Packaging and zero-configuration installation**
+   - Build and install the AUR package in a clean Arch environment.
+   - Exercise the one-command installer on Arch-family systems and verify
+     conservative failure on unsupported package/runtime combinations.
+   - Publish and maintain the package only after those gates pass.
+
+4. **Legacy Noctalia v4 compatibility**
+   - Implement and isolate the QML compatibility host.
+   - Execute representative v4 plugins; manifest discovery alone is not
+     compatibility.
+
+5. **Catalog and XRY acceptance**
+   - Run the pinned official/community catalog matrix across all entry kinds and
+     supported API boundaries.
+   - Install on XRY and complete visual, interaction, login, lock, recovery, and
+     runtime-log acceptance.
+
+The v4 compatibility, catalog matrix, AUR publication, and XRY acceptance gates
+are pending. Source implementation or local configuration validation does not
+make those milestones complete.
