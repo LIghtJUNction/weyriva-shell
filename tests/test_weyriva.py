@@ -261,6 +261,10 @@ class SessionLifecycleTests(unittest.TestCase):
         package = (ROOT / "packaging/aur/PKGBUILD").read_text()
         self.assertNotIn('"$pkgdir/etc/xdg', package)
         self.assertNotIn("backup=(", package)
+        self.assertIn(
+            'assets/wallpapers/weyriva-cactus.png "$pkgdir/usr/share/weyriva/wallpapers/weyriva-cactus.png"',
+            package,
+        )
         for component in ("niri", "waybar", "fuzzel", "mako"):
             self.assertIn(f"usr/share/weyriva/config/{component}", package)
 
@@ -458,6 +462,10 @@ class ControlMethodTests(unittest.TestCase):
 
 
 class WallpaperTests(unittest.TestCase):
+    def test_cactus_wallpaper_is_the_packaged_default(self) -> None:
+        self.assertEqual(weyriva.WALLPAPER_FILE, "weyriva-cactus.png")
+        self.assertTrue((ROOT / "assets/wallpapers" / weyriva.WALLPAPER_FILE).is_file())
+
     def test_resolution_prefers_override_then_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

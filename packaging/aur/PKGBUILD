@@ -27,6 +27,7 @@ package() {
   install -Dm644 config/fuzzel/fuzzel.ini "$pkgdir/usr/share/weyriva/config/fuzzel/fuzzel.ini"
   install -Dm644 config/mako/config "$pkgdir/usr/share/weyriva/config/mako/config"
   install -Dm644 config/greetd/config.toml "$pkgdir/usr/share/weyriva/greetd/config.toml"
+  install -Dm644 assets/wallpapers/weyriva-cactus.png "$pkgdir/usr/share/weyriva/wallpapers/weyriva-cactus.png"
   install -Dm644 assets/wallpapers/weyriva-coral.svg "$pkgdir/usr/share/weyriva/wallpapers/weyriva-coral.svg"
   install -Dm644 user-share/wayland-sessions/weyriva.desktop "$pkgdir/usr/share/wayland-sessions/weyriva.desktop"
   install -Dm644 systemd/*.service -t "$pkgdir/usr/lib/systemd/user"

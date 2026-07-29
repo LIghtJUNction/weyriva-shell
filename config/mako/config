@@ -1,20 +1,20 @@
 font=Noto Sans 11
-background-color=#292522d9
-text-color=#fffaf3
-border-color=#ffffff38
+background-color=#FAF9F5
+text-color=#141413
+border-color=#141413
 border-size=1
-border-radius=20
-width=380
-height=150
-margin=18
-padding=18
+border-radius=12
+width=360
+height=140
+margin=14
+padding=16
 default-timeout=5500
 icons=1
 max-icon-size=48
-progress-color=over #ef6a5b59
+progress-color=over #BCD1CA
 
 [urgency=high]
-border-color=#b83b35
+border-color=#141413
 default-timeout=0
 
 [mode=dnd]

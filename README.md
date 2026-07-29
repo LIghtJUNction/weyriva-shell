@@ -13,7 +13,15 @@ The original coral/cream/ink artwork is a project-owned editorial design. Weyriv
 - greetd with tuigreet as an explicit, separate system template
 - `weyriva` Python standard-library CLI and protocol-v1 Unix-socket daemon
 - explicit-manifest executable plugins under XDG config/data paths
-- original SVG wallpaper and graphical-session-bound systemd user services
+- original cactus editorial PNG wallpaper and graphical-session-bound systemd user services
+
+## Visual system
+
+The default desktop uses a compact ivory Waybar rail, calm ivory launcher and
+notifications, and cactus focus and selection states over the bundled cactus
+editorial wallpaper. The shared palette is ink `#141413`, ivory `#FAF9F5`, and
+cactus `#BCD1CA`; the original project artwork is inspired by an editorial
+hand-drawn language and is not affiliated with Anthropic.
 
 ## Try it safely
 
@@ -76,7 +84,9 @@ Mod+N in the packaged niri config); pass `--params '{"enabled": true}'` to set i
 explicitly. `weyriva.panel.toggle` hides or shows Waybar (Mod+B) and
 `weyriva.panel.reload` reloads its configuration. `weyriva wallpaper set` records a
 per-user wallpaper override under XDG config, restarts the wallpaper service when a
-user service manager is available, and `reset` returns to the packaged artwork.
+user service manager is available, and `reset` returns to the bundled cactus
+artwork. The primary session shortcuts are Mod+Space (launcher), Mod+Return
+(terminal), Mod+B (panel), Mod+N (do-not-disturb), and Print (screenshot).
 
 `weyriva diagnose` is the Niri-only health check for the compositor, session entry,
 greetd login path, required desktop commands, user services, and the current Niri

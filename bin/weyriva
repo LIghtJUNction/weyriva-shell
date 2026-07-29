@@ -65,7 +65,7 @@ BUILTIN_METHODS: Final = (
     "weyriva.niri.outputs",
     "weyriva.niri.windows",
 )
-WALLPAPER_FILE: Final = "weyriva-coral.svg"
+WALLPAPER_FILE: Final = "weyriva-cactus.png"
 WALLPAPER_SERVICE: Final = "weyriva-wallpaper.service"
 PACKAGED_WALLPAPER_ROOT: Final = Path("/usr/share/weyriva/wallpapers")
 
