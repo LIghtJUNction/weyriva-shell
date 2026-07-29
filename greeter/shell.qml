@@ -6,11 +6,12 @@ import Quickshell
 import Quickshell.Services.Greetd
 
 ShellRoot {
-    PanelWindow {
+    FloatingWindow {
         id: window
-        anchors { top: true; left: true; right: true; bottom: true }
+        visible: true
+        fullscreen: true
+        title: "Weyriva Greeter"
         color: "#BCD1CA"
-        focusable: true
         Component.onCompleted: username.forceActiveFocus()
 
         Canvas {
