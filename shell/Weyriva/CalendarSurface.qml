@@ -19,7 +19,7 @@ ColumnLayout {
         0
     ).getDate()
 
-    spacing: 10
+    spacing: 12
 
     function moveMonth(offset) {
         calendarMonth = new Date(
@@ -47,6 +47,7 @@ ColumnLayout {
             color: Theme.foreground
             font.pixelSize: 18
             font.weight: Font.DemiBold
+            font.letterSpacing: -0.25
         }
 
         ActionButton {
@@ -67,8 +68,8 @@ ColumnLayout {
     GridLayout {
         Layout.fillWidth: true
         columns: 7
-        rowSpacing: 4
-        columnSpacing: 4
+        rowSpacing: 3
+        columnSpacing: 3
 
         Repeater {
             model: ["S", "M", "T", "W", "T", "F", "S"]
@@ -108,9 +109,19 @@ ColumnLayout {
                         === root.selectedDate.getFullYear()
 
                 Layout.fillWidth: true
-                implicitHeight: 34
+                implicitHeight: 36
                 enabled: valid
-                scale: down && !ShellState.reducedMotion ? 0.92 : 1
+                scale: down && !ShellState.reducedMotion ? 0.9 : 1
+                opacity: enabled ? (down ? 0.76 : 1) : 0
+
+                Behavior on scale {
+                    enabled: !dayCell.down && !ShellState.reducedMotion
+                    NumberAnimation {
+                        duration: Theme.motionFast
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
                 onClicked: root.selectedDate = new Date(
                     root.calendarMonth.getFullYear(),
                     root.calendarMonth.getMonth(),
@@ -119,8 +130,8 @@ ColumnLayout {
 
                 contentItem: Text {
                     text: dayCell.valid ? dayCell.dayNumber : ""
-                    color: dayCell.selected || dayCell.today
-                        ? Theme.onSelection : Theme.foreground
+                    color: dayCell.selected ? Theme.onSelection
+                        : dayCell.today ? Theme.accent : Theme.foreground
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     font.pixelSize: 13
@@ -130,11 +141,12 @@ ColumnLayout {
 
                 background: Rectangle {
                     color: dayCell.selected ? Theme.selection
-                        : dayCell.today ? Theme.accent
-                        : dayCell.hovered ? Theme.surfaceAlt : "transparent"
-                    radius: 12
-                    border.width: dayCell.activeFocus ? 2 : 0
-                    border.color: Theme.foreground
+                        : dayCell.down ? Theme.pressed
+                        : dayCell.hovered ? Theme.hover : "transparent"
+                    radius: 18
+                    border.width: dayCell.activeFocus || dayCell.today ? 2 : 0
+                    border.color: dayCell.activeFocus
+                        ? Theme.focusRing : Theme.accent
                 }
             }
         }
@@ -155,9 +167,9 @@ ColumnLayout {
         Text {
             text: Qt.formatTime(ShellState.now, "hh:mm")
             color: Theme.foreground
-            font.pixelSize: 29
+            font.pixelSize: 30
             font.weight: Font.Bold
-            font.letterSpacing: -0.5
+            font.letterSpacing: -0.7
         }
     }
 }

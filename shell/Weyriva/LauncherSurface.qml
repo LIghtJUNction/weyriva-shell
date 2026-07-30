@@ -3,15 +3,12 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
-
 Item {
     id: root
     required property bool active
     property string selectedCategory: ""
-    readonly property string providerReference: pluginBridge.activeProvider
-        ? pluginBridge.activeProvider.reference : ""
-    readonly property var providerCategories: pluginBridge.activeProvider
-        ? (pluginBridge.activeProvider.categories || []) : []
+    readonly property string providerReference: pluginBridge.activeProvider ? pluginBridge.activeProvider.reference : ""
+    readonly property var providerCategories: pluginBridge.activeProvider ? (pluginBridge.activeProvider.categories || []) : []
     readonly property var categoryOptions: {
         const options = [{label: "All", value: "", glyph: ""}]
         for (let index = 0; index < providerCategories.length; ++index) {
@@ -38,18 +35,17 @@ Item {
         id: row
         required property var modelData
         property bool pluginResult: false
-        property string subtitle: pluginResult
-            ? (modelData.subtitle || modelData.category || "")
-            : (modelData.genericName || "")
-        property bool selected: ListView.isCurrentItem
-            || (
-                pluginBridge.activationPending
-                && pluginBridge.pendingResultId === modelData.id
-            )
+        property string subtitle: pluginResult ? (modelData.subtitle || modelData.category || "") : (modelData.genericName || "")
+        property bool selected: ListView.isCurrentItem || (pluginBridge.activationPending && pluginBridge.pendingResultId === modelData.id)
         implicitHeight: 48
-        leftPadding: 12
-        rightPadding: 12
-        scale: down && !ShellState.reducedMotion ? 0.985 : 1
+        leftPadding: 10
+        rightPadding: 10
+        scale: down && !ShellState.reducedMotion ? 0.975 : 1
+        opacity: enabled ? (down ? 0.78 : 1) : 0.42
+        Behavior on scale {
+            enabled: !row.down && !ShellState.reducedMotion
+            NumberAnimation { duration: Theme.motionFast; easing.type: Easing.OutCubic }
+        }
         function launch() {
             if (pluginResult) {
                 pluginBridge.activate(modelData.id)
@@ -80,17 +76,17 @@ Item {
             }
         }
         background: Rectangle {
-            color: row.down ? Theme.selection
-                : row.selected || row.hovered ? Theme.surfaceAlt
-                : "transparent"
-            radius: 8
+            color: row.down ? Theme.pressed : row.selected ? Theme.pressed
+                : row.hovered ? Theme.hover : "transparent"
+            radius: Theme.radiusSmall
             border.width: row.activeFocus ? 2 : 0
-            border.color: Theme.foreground
+            border.color: Theme.focusRing
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.leftMargin: 12
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
                 height: 1
                 color: Theme.separator
             }
@@ -114,7 +110,6 @@ Item {
     PluginLauncherBridge {
         id: pluginBridge
         input: search.text
-
         onQueryReplacementRequested: function(providerPrefix, query) {
             search.text = providerPrefix + " " + query
             search.forceActiveFocus()
@@ -148,17 +143,17 @@ Item {
     }
     ColumnLayout {
         anchors.fill: parent
-        spacing: 8
+        spacing: 10
         TextField {
             id: search
             Layout.fillWidth: true
-            implicitHeight: 52
+            implicitHeight: 50
             placeholderText: "Search applications"
             color: Theme.foreground
             placeholderTextColor: Theme.muted
             font.pixelSize: 17
-            leftPadding: 16
-            rightPadding: 16
+            leftPadding: 4
+            rightPadding: 4
             selectByMouse: true
             onTextChanged: Qt.callLater(launcherList.resetSelection)
             onAccepted: launcherList.launchCurrent()
@@ -166,12 +161,14 @@ Item {
                 launcherList.resetSelection()
                 launcherList.forceActiveFocus()
             }
-            background: Rectangle {
-                color: Theme.surfaceAlt
-                radius: 12
-                border.width: search.activeFocus ? 2 : 1
-                border.color: search.activeFocus
-                    ? Theme.foreground : Theme.separator
+            background: Item {
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: search.activeFocus ? 2 : 1
+                    color: search.activeFocus ? Theme.focusRing : Theme.separator
+                }
             }
         }
         Text {
@@ -193,7 +190,7 @@ Item {
             Row {
                 id: categoryRow
                 height: parent.height
-                spacing: 5
+                spacing: 4
                 Repeater {
                     model: root.categoryOptions
                     delegate: Button {
@@ -203,9 +200,11 @@ Item {
                         text: modelData.label
                         leftPadding: 10
                         rightPadding: 10
-                        scale: down && !ShellState.reducedMotion ? 0.98 : 1
+                        scale: down && !ShellState.reducedMotion ? 0.96 : 1
+                        opacity: down ? 0.76 : 1
                         Behavior on scale {
-                            enabled: !ShellState.reducedMotion
+                            enabled: !categoryButton.down
+                                && !ShellState.reducedMotion
                             NumberAnimation { duration: Theme.motionFast }
                         }
                         onClicked: {
@@ -221,26 +220,38 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
-                        background: Rectangle {
-                            color: categoryButton.down
-                                ? Theme.selection
-                                : root.selectedCategory === modelData.value
-                                ? Theme.selection
-                                : categoryButton.hovered ? Theme.surfaceAlt
-                                : "transparent"
-                            radius: 7
-                            border.width: categoryButton.activeFocus ? 2 : 0
-                            border.color: Theme.foreground
+                        background: Item {
+                            Rectangle {
+                                anchors.fill: parent
+                                color: categoryButton.down ? Theme.pressed :
+                                    categoryButton.hovered ? Theme.hover : "transparent"
+                                radius: Theme.radiusSmall
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                height: root.selectedCategory
+                                    === modelData.value ? 2 : 0
+                                color: Theme.accent
+                            }
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "transparent"
+                                radius: Theme.radiusSmall
+                                border.width: categoryButton.activeFocus ? 2 : 0
+                                border.color: Theme.focusRing
+                            }
                         }
                     }
                 }
             }
         }
-
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-
             ListView {
                 id: launcherList
                 anchors.fill: parent
@@ -250,17 +261,12 @@ Item {
                 keyNavigationEnabled: false
                 model: pluginBridge.providerMode
                     ? root.filteredPluginResults : filteredApplications
-
-                function resetSelection() {
-                    currentIndex = count > 0 ? 0 : -1
-                }
-
+                function resetSelection() { currentIndex = count > 0 ? 0 : -1 }
                 function launchCurrent() {
                     const item = currentItem as LauncherButton
                     if (item)
                         item.launch()
                 }
-
                 onCountChanged: resetSelection()
                 Keys.onDownPressed: {
                     if (count > 0)
@@ -273,25 +279,21 @@ Item {
                 Keys.onReturnPressed: launchCurrent()
                 Keys.onEnterPressed: launchCurrent()
                 Keys.onEscapePressed: ShellState.closeRoute()
-
                 delegate: LauncherButton {
                     width: ListView.view.width
                     pluginResult: pluginBridge.providerMode
                 }
             }
-
             Column {
                 anchors.centerIn: parent
                 visible: launcherList.count === 0
                 spacing: 8
-
                 BrandMark {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 84
                     height: 62
                     quiet: true
                 }
-
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: pluginBridge.providerMode && pluginBridge.loading
@@ -305,7 +307,6 @@ Item {
                     font.pixelSize: 14
                     font.weight: Font.DemiBold
                 }
-
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: pluginBridge.error.length > 0

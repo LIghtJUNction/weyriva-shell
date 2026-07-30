@@ -6,12 +6,12 @@ Item {
     required property var sourceScreen
 
     implicitWidth: 760
-    implicitHeight: 40
+    implicitHeight: 38
 
     Rectangle {
         anchors.fill: parent
         color: Theme.chrome
-        radius: 11
+        radius: 12
         border.width: 1
         border.color: Theme.separator
     }
@@ -61,7 +61,7 @@ Item {
         spacing: 2
 
         ActionButton {
-            glyph: "•"
+            glyph: ShellState.doNotDisturb ? "–" : "•"
             text: "Notifications"
             compact: true
             chrome: true

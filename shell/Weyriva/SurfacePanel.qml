@@ -118,7 +118,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: Theme.surface
-        radius: root.utility ? 14 : 18
+        radius: root.utility ? 14 : Theme.radius
         border.width: 1
         border.color: Theme.separator
     }
@@ -126,11 +126,11 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         opacity: root.routeFade
-        anchors.leftMargin: root.utility ? 18 : 22
-        anchors.rightMargin: root.utility ? 18 : 22
-        anchors.topMargin: root.utility ? 16 : 20
-        anchors.bottomMargin: root.utility ? 16 : 20
-        spacing: root.utility ? 10 : 14
+        anchors.leftMargin: root.utility ? 16 : 24
+        anchors.rightMargin: root.utility ? 16 : 24
+        anchors.topMargin: root.utility ? 14 : 22
+        anchors.bottomMargin: root.utility ? 14 : 22
+        spacing: root.utility ? 8 : 12
 
         SurfaceHeader {
             Layout.fillWidth: true

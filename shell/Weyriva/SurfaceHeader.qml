@@ -7,15 +7,16 @@ RowLayout {
     required property string title
     required property bool utility
 
-    spacing: 10
+    implicitHeight: root.utility ? 32 : 38
+    spacing: 12
 
     Text {
         Layout.fillWidth: true
         text: root.title
         color: Theme.foreground
-        font.pixelSize: root.utility ? 19 : 24
+        font.pixelSize: root.utility ? 18 : 22
         font.weight: Font.DemiBold
-        font.letterSpacing: root.utility ? -0.1 : -0.4
+        font.letterSpacing: root.utility ? -0.2 : -0.45
     }
 
     ActionButton {

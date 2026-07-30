@@ -7,7 +7,7 @@ ColumnLayout {
     UtilityRow {
         Layout.fillWidth: true
         selected: ShellState.doNotDisturb
-        glyph: "•"
+        glyph: "◐"
         text: "Do Not Disturb"
         value: ShellState.doNotDisturb ? "On" : "Off"
         onClicked: ShellState.doNotDisturb = !ShellState.doNotDisturb
@@ -16,7 +16,7 @@ ColumnLayout {
     UtilityRow {
         Layout.fillWidth: true
         selected: ShellState.dark
-        glyph: "◐"
+        glyph: "◑"
         text: "Appearance"
         value: ShellState.dark ? "Dark" : "Light"
         onClicked: ShellState.setDark(!ShellState.dark)

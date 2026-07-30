@@ -28,6 +28,7 @@ Item {
                     + " recent"
                 color: Theme.muted
                 font.pixelSize: 11
+                font.weight: Font.DemiBold
             }
 
             ActionButton {
@@ -53,13 +54,13 @@ Item {
                 required property var modelData
 
                 width: ListView.view.width
-                height: 72
+                height: 70
 
                 Column {
                     anchors.left: parent.left
                     anchors.right: dismissButton.left
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 4
+                    anchors.leftMargin: 2
                     anchors.rightMargin: 10
                     spacing: 3
 

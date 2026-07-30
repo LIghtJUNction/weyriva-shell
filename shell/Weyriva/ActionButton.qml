@@ -10,19 +10,19 @@ Button {
     property bool chrome: false
     property bool danger: false
 
-    implicitWidth: compact ? 32 : Math.max(88, contentItem.implicitWidth + 24)
-    implicitHeight: compact ? 32 : subtitle.length > 0 ? 52 : 40
+    implicitWidth: compact ? 32 : Math.max(82, contentItem.implicitWidth + 22)
+    implicitHeight: compact ? 32 : subtitle.length > 0 ? 48 : 38
     leftPadding: compact ? 0 : 12
     rightPadding: compact ? 0 : 12
     enabled: true
-    scale: down && !ShellState.reducedMotion ? 0.97 : 1
-    opacity: enabled ? 1 : 0.48
+    scale: down && !ShellState.reducedMotion ? 0.96 : 1
+    opacity: enabled ? (down ? 0.76 : 1) : 0.42
     ToolTip.visible: compact && hovered
     ToolTip.text: text
-    ToolTip.delay: 650
+    ToolTip.delay: 500
 
     Behavior on scale {
-        enabled: !ShellState.reducedMotion
+        enabled: !control.down && !ShellState.reducedMotion
         NumberAnimation { duration: Theme.motionFast; easing.type: Easing.OutCubic }
     }
 
@@ -54,6 +54,7 @@ Button {
                     : (control.chrome ? Theme.chromeMuted : Theme.muted)
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
+                font.letterSpacing: -0.1
             }
             Text {
                 visible: control.subtitle.length > 0
@@ -65,18 +66,13 @@ Button {
     }
 
     background: Rectangle {
-        color: control.down ? (control.danger ? Theme.clay : Theme.selection)
+        color: control.down ? (control.danger ? Theme.clay : Theme.pressed)
              : control.selected ? Theme.selection
              : control.hovered && control.enabled
-                 ? (control.chrome ? Theme.separator : Theme.surfaceAlt)
+                 ? Theme.hover
              : "transparent"
-        radius: control.compact ? 8 : 10
+        radius: Theme.radiusSmall
         border.width: control.activeFocus ? 2 : 0
-        border.color: control.chrome ? Theme.chromeText : Theme.foreground
-
-        Behavior on color {
-            enabled: !ShellState.reducedMotion
-            ColorAnimation { duration: Theme.motionFast }
-        }
+        border.color: Theme.focusRing
     }
 }
