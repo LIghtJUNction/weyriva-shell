@@ -42,6 +42,7 @@ fn complete_command_matrix_parses() {
         &["plugin", "uninstall", "test/demo", "--help"],
         &["plugin", "query", "test/demo:main", "text", "--help"],
         &["plugin", "activate", "test/demo:main", "row", "--help"],
+        &["plugin", "ipc", "test/demo:sync", "refresh", "--help"],
     ];
 
     for arguments in cases {

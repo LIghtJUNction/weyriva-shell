@@ -7,7 +7,7 @@ use serde_json::Value as JsonValue;
 use toml::Value as TomlValue;
 
 use crate::error::{Error, Result};
-use crate::model::{Candidate, Category, PLUGIN_API, Provider};
+use crate::model::{Candidate, Category, PLUGIN_API, Provider, Service};
 
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
@@ -22,6 +22,8 @@ struct RawManifest {
     _deprecated: bool,
     #[serde(default)]
     launcher_provider: Vec<RawProvider>,
+    #[serde(default)]
+    service: Vec<RawService>,
     #[serde(default)]
     setting: Vec<RawSetting>,
     #[serde(default, rename = "license")]
@@ -51,6 +53,14 @@ struct RawProvider {
     debounce_ms: u64,
     #[serde(default, rename = "category")]
     categories: Vec<Category>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, TomlValue>,
+}
+
+#[derive(Deserialize)]
+struct RawService {
+    id: String,
+    entry: String,
     #[serde(flatten)]
     extra: BTreeMap<String, TomlValue>,
 }
@@ -110,7 +120,7 @@ pub fn valid_identifier(value: &str) -> bool {
             .is_some_and(u8::is_ascii_alphanumeric)
 }
 
-/// Parses and validates one API3 single-launcher-provider manifest.
+/// Parses and validates one API3 launcher manifest with an optional service.
 ///
 /// # Errors
 ///
@@ -138,16 +148,19 @@ pub fn parse_plugin(root: &Path) -> Result<Candidate> {
         .into_iter()
         .next()
         .ok_or_else(|| Error::new("unsupported_plugin", "missing launcher provider"))?;
-    let entry = validate_relative_luau(&raw_provider.entry)?;
-    let entry_path = root.join(&entry);
-    let entry_metadata = fs::symlink_metadata(&entry_path)
-        .map_err(|error| Error::io("cannot inspect launcher entry", &error))?;
-    if entry_metadata.file_type().is_symlink() || !entry_metadata.is_file() {
-        return Err(Error::new(
-            "invalid_manifest",
-            "launcher entry is not a regular file",
-        ));
-    }
+    let entry = validate_entry(root, &raw_provider.entry, "launcher")?;
+    let service = raw
+        .service
+        .into_iter()
+        .next()
+        .map(|service| -> Result<Service> {
+            let entry = validate_entry(root, &service.entry, "service")?;
+            Ok(Service {
+                id: service.id,
+                entry: path_to_slashes(&entry),
+            })
+        })
+        .transpose()?;
     let settings_defaults = validate_settings(raw.setting)?;
     Ok(Candidate {
         root: root.to_path_buf(),
@@ -162,6 +175,7 @@ pub fn parse_plugin(root: &Path) -> Result<Candidate> {
             include_in_global_search: raw_provider.include_in_global_search,
             debounce_ms: raw_provider.debounce_ms,
             categories: raw_provider.categories,
+            service,
         },
         settings_defaults,
     })
@@ -201,6 +215,12 @@ fn validate_manifest_root(raw: &RawManifest) -> Result<()> {
             "plugin must contain exactly one launcher_provider",
         ));
     }
+    if raw.service.len() > 1 {
+        return Err(Error::new(
+            "unsupported_plugin",
+            "plugin may contain at most one service",
+        ));
+    }
     let provider = &raw.launcher_provider[0];
     if !provider.extra.is_empty() || !valid_identifier(&provider.id) {
         return Err(Error::new(
@@ -228,7 +248,31 @@ fn validate_manifest_root(raw: &RawManifest) -> Result<()> {
             "launcher category label is empty",
         ));
     }
+    if let Some(service) = raw.service.first()
+        && (!service.extra.is_empty()
+            || !valid_identifier(&service.id)
+            || service.id == provider.id)
+    {
+        return Err(Error::new(
+            "invalid_manifest",
+            "service contains unsupported fields or invalid or duplicate id",
+        ));
+    }
     Ok(())
+}
+
+fn validate_entry(root: &Path, raw_entry: &str, kind: &str) -> Result<PathBuf> {
+    let entry = validate_relative_luau(raw_entry)?;
+    let inspect_message = format!("cannot inspect {kind} entry");
+    let metadata = fs::symlink_metadata(root.join(&entry))
+        .map_err(|error| Error::io(&inspect_message, &error))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(Error::new(
+            "invalid_manifest",
+            format!("{kind} entry is not a regular file"),
+        ));
+    }
+    Ok(entry)
 }
 
 fn validate_settings(settings: Vec<RawSetting>) -> Result<BTreeMap<String, JsonValue>> {

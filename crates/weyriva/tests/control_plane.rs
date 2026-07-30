@@ -126,7 +126,13 @@ fn cli_drives_complete_launcher_provider_lifecycle() {
     let temporary = tempdir().expect("temporary directory should be created");
     let paths = common::paths(&temporary);
     let source = temporary.path().join("source");
-    common::write_plugin(&source, "1.0.0", "");
+    let plugin = common::write_plugin(
+        &source,
+        "1.0.0",
+        "\n[[service]]\nid = \"sync\"\nentry = \"service.luau\"\n",
+    );
+    fs::write(plugin.join("service.luau"), "function update() end\n")
+        .expect("service fixture should be written");
     let host = common::install_fake_host(temporary.path());
     let (shutdown, handle) = start_daemon(paths.clone(), host);
     wait_for_socket(&paths.socket_file());
@@ -145,15 +151,33 @@ fn cli_drives_complete_launcher_provider_lifecycle() {
         temporary.path(),
         &["plugin", "activate", "test/demo:main", "row-1"],
     );
+    let ipc = run_cli(
+        temporary.path(),
+        &[
+            "plugin",
+            "ipc",
+            "test/demo:sync",
+            "refresh",
+            "--payload",
+            r#"{"generation":2}"#,
+        ],
+    );
     let disable = run_cli(temporary.path(), &["plugin", "disable", "test/demo"]);
     let uninstall = run_cli(temporary.path(), &["plugin", "uninstall", "test/demo"]);
     let remove = run_cli(temporary.path(), &["plugin", "source", "remove", "fixture"]);
 
     assert_eq!(add["result"]["source"]["name"], "fixture");
     assert_eq!(install["result"]["plugins"][0]["installed"], true);
+    assert_eq!(
+        install["result"]["plugins"][0]["provider"]["service"]["id"],
+        "sync"
+    );
     assert_eq!(enable["result"]["plugins"][0]["lifecycle"], "running");
     assert_eq!(query["result"]["results"][0]["title"], "Result hello");
     assert_eq!(activate["result"]["action_results"][0]["type"], "set_query");
+    assert_eq!(ipc["result"]["value"]["entry"], "sync");
+    assert_eq!(ipc["result"]["value"]["event"], "refresh");
+    assert_eq!(ipc["result"]["value"]["payload"]["generation"], 2);
     assert_eq!(disable["result"]["status"]["plugins"][0]["enabled"], false);
     assert_eq!(disable["result"]["shutdown"]["onExit"], true);
     assert_eq!(disable["result"]["shutdown"]["actions"], json!([]));

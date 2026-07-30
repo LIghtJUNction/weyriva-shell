@@ -1,5 +1,5 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use mlua::{Error as LuaError, Function, Lua, LuaSerdeExt, Table, Value};
@@ -10,8 +10,64 @@ use crate::error::{HostResult, from_lua};
 use crate::model::check_string;
 use crate::runtime::value::{json_to_lua, validate_json_size};
 
-pub(super) fn create_state_api(lua: &Lua) -> HostResult<Table> {
-    let state_values = Rc::new(RefCell::new(HashMap::<String, JsonValue>::new()));
+#[derive(Clone, Default)]
+pub(in crate::runtime) struct SharedState {
+    values: Rc<RefCell<HashMap<String, JsonValue>>>,
+    pending: Rc<RefCell<VecDeque<StateChange>>>,
+    next_vm_id: Rc<Cell<u64>>,
+}
+
+#[derive(Clone)]
+struct StateChange {
+    source_vm_id: u64,
+    key: String,
+    value: JsonValue,
+}
+
+pub(in crate::runtime) struct StateWatchers {
+    vm_id: u64,
+    callbacks: Table,
+}
+
+impl SharedState {
+    pub(in crate::runtime) fn pop_change(&self) -> Option<(u64, String, JsonValue)> {
+        self.pending
+            .borrow_mut()
+            .pop_front()
+            .map(|change| (change.source_vm_id, change.key, change.value))
+    }
+
+    pub(in crate::runtime) fn clear_changes(&self) {
+        self.pending.borrow_mut().clear();
+    }
+}
+
+impl StateWatchers {
+    pub(in crate::runtime) const fn vm_id(&self) -> u64 {
+        self.vm_id
+    }
+
+    pub(in crate::runtime) fn notify(
+        &self,
+        lua: &Lua,
+        key: &str,
+        value: &JsonValue,
+    ) -> mlua::Result<()> {
+        if let Some(callbacks) = self.callbacks.get::<Option<Table>>(key)? {
+            for callback in callbacks.sequence_values::<Function>() {
+                callback?.call::<()>(json_to_lua(lua, value)?)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn create_state_api(
+    lua: &Lua,
+    shared: &SharedState,
+) -> HostResult<(Table, StateWatchers)> {
+    let vm_id = shared.next_vm_id.get();
+    shared.next_vm_id.set(vm_id.saturating_add(1));
     let state_watchers = lua
         .create_table()
         .map_err(|error| from_lua(&error, "runtime_init"))?;
@@ -19,7 +75,7 @@ pub(super) fn create_state_api(lua: &Lua) -> HostResult<Table> {
         .create_table()
         .map_err(|error| from_lua(&error, "runtime_init"))?;
 
-    let get_values = Rc::clone(&state_values);
+    let get_values = Rc::clone(&shared.values);
     state_api
         .set(
             "get",
@@ -35,7 +91,8 @@ pub(super) fn create_state_api(lua: &Lua) -> HostResult<Table> {
         )
         .map_err(|error| from_lua(&error, "runtime_init"))?;
 
-    let set_values = Rc::clone(&state_values);
+    let set_values = Rc::clone(&shared.values);
+    let pending = Rc::clone(&shared.pending);
     let set_watchers = state_watchers.clone();
     state_api
         .set(
@@ -45,18 +102,22 @@ pub(super) fn create_state_api(lua: &Lua) -> HostResult<Table> {
                 let value = lua.from_value::<JsonValue>(value)?;
                 validate_json_size("state value", &value).map_err(LuaError::external)?;
                 set_values.borrow_mut().insert(key.clone(), value.clone());
-
-                if let Some(callbacks) = set_watchers.get::<Option<Table>>(key)? {
+                if let Some(callbacks) = set_watchers.get::<Option<Table>>(key.clone())? {
                     for callback in callbacks.sequence_values::<Function>() {
                         callback?.call::<()>(json_to_lua(lua, &value)?)?;
                     }
                 }
+                pending.borrow_mut().push_back(StateChange {
+                    source_vm_id: vm_id,
+                    key,
+                    value,
+                });
                 Ok(())
             })?,
         )
         .map_err(|error| from_lua(&error, "runtime_init"))?;
 
-    let watch_watchers = state_watchers;
+    let watch_watchers = state_watchers.clone();
     state_api
         .set(
             "watch",
@@ -76,7 +137,13 @@ pub(super) fn create_state_api(lua: &Lua) -> HostResult<Table> {
         )
         .map_err(|error| from_lua(&error, "runtime_init"))?;
     install_unsupported_index(lua, &state_api, "noctalia.state", &[])?;
-    Ok(state_api)
+    Ok((
+        state_api,
+        StateWatchers {
+            vm_id,
+            callbacks: state_watchers,
+        },
+    ))
 }
 
 fn validate_state_key(key: &str) -> HostResult<()> {

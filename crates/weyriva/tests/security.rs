@@ -14,7 +14,7 @@ use tempfile::tempdir;
 use weyriva::archive;
 use weyriva::host_session::HostSession;
 use weyriva::manifest::parse_plugin;
-use weyriva::model::Provider;
+use weyriva::model::{Provider, Service};
 use weyriva::storage::atomic_json;
 use weyriva::tree::validate_and_hash;
 use weyriva::{Broker, ipc};
@@ -70,6 +70,73 @@ extensions = ["txt", "md"]
         candidate.settings_defaults["document"],
         json!("/tmp/example.txt")
     );
+}
+
+#[test]
+fn manifest_accepts_one_launcher_and_one_service() {
+    let temporary = tempdir().expect("temporary directory should be created");
+    let plugin = common::write_plugin(
+        temporary.path(),
+        "1.0.0",
+        "\n[[service]]\nid = \"sync\"\nentry = \"service.luau\"\n",
+    );
+    fs::write(plugin.join("service.luau"), "function update() end\n")
+        .expect("service entry fixture should be written");
+
+    let candidate = parse_plugin(&plugin).expect("API3 launcher plus one service should parse");
+
+    assert_eq!(
+        candidate.provider.service,
+        Some(Service {
+            id: "sync".to_owned(),
+            entry: "service.luau".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn manifest_rejects_multiple_services() {
+    let temporary = tempdir().expect("temporary directory should be created");
+    let plugin = common::write_plugin(
+        temporary.path(),
+        "1.0.0",
+        concat!(
+            "\n[[service]]\nid = \"first\"\nentry = \"first.luau\"\n",
+            "\n[[service]]\nid = \"second\"\nentry = \"second.luau\"\n",
+        ),
+    );
+
+    let error = parse_plugin(&plugin).expect_err("multiple services should be rejected");
+
+    assert_eq!(error.code(), "unsupported_plugin");
+}
+
+#[test]
+fn manifest_rejects_duplicate_entry_ids() {
+    let temporary = tempdir().expect("temporary directory should be created");
+    let plugin = common::write_plugin(
+        temporary.path(),
+        "1.0.0",
+        "\n[[service]]\nid = \"main\"\nentry = \"service.luau\"\n",
+    );
+
+    let error = parse_plugin(&plugin).expect_err("duplicate entry ids should be rejected");
+
+    assert_eq!(error.code(), "invalid_manifest");
+}
+
+#[test]
+fn manifest_rejects_unknown_service_fields() {
+    let temporary = tempdir().expect("temporary directory should be created");
+    let plugin = common::write_plugin(
+        temporary.path(),
+        "1.0.0",
+        "\n[[service]]\nid = \"sync\"\nentry = \"service.luau\"\nautostart = true\n",
+    );
+
+    let error = parse_plugin(&plugin).expect_err("unknown service fields should be rejected");
+
+    assert_eq!(error.code(), "invalid_manifest");
 }
 
 #[test]
@@ -398,5 +465,6 @@ fn provider() -> Provider {
         include_in_global_search: true,
         debounce_ms: 80,
         categories: Vec::new(),
+        service: None,
     }
 }

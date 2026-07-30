@@ -18,6 +18,7 @@ pub(crate) struct HostProcess {
     input: BufWriter<ChildStdin>,
     output: Receiver<String>,
     reader: Option<JoinHandle<()>>,
+    _plugin_dir: Option<TempDir>,
 }
 
 impl HostProcess {
@@ -30,16 +31,56 @@ impl HostProcess {
         entry: &str,
         settings: impl Into<JsonValue>,
     ) -> Self {
+        Self::spawn(plugin_dir, entry, None, settings, None)
+    }
+
+    pub(crate) fn start_with_service(
+        launcher_source: &str,
+        service_source: &str,
+        settings: impl Into<JsonValue>,
+    ) -> Self {
+        let plugin_dir = TempDir::new("service");
+        fs::write(plugin_dir.path.join("launcher.luau"), launcher_source)
+            .expect("launcher fixture should be written");
+        fs::write(plugin_dir.path.join("service.luau"), service_source)
+            .expect("service fixture should be written");
+        Self::spawn(
+            plugin_dir.path.clone(),
+            "launcher.luau",
+            Some(("sync", "service.luau")),
+            settings,
+            Some(plugin_dir),
+        )
+    }
+
+    fn spawn(
+        plugin_dir: PathBuf,
+        entry: &str,
+        service: Option<(&str, &str)>,
+        settings: impl Into<JsonValue>,
+        plugin_dir_guard: Option<TempDir>,
+    ) -> Self {
         let settings = settings.into();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_weyriva-luau-host"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_weyriva-luau-host"));
+        command
             .arg("--plugin-dir")
             .arg(plugin_dir)
             .arg("--entry")
             .arg(entry)
+            .arg("--entry-id")
+            .arg("main")
             .arg("--kind")
             .arg("launcher_provider")
             .arg("--settings-json")
-            .arg(settings.to_string())
+            .arg(settings.to_string());
+        if let Some((service_id, service_entry)) = service {
+            command
+                .arg("--service-id")
+                .arg(service_id)
+                .arg("--service-entry")
+                .arg(service_entry);
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -64,6 +105,7 @@ impl HostProcess {
             input: BufWriter::new(input),
             output: receiver,
             reader: Some(reader),
+            _plugin_dir: plugin_dir_guard,
         }
     }
 

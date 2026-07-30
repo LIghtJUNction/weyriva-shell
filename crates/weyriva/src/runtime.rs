@@ -100,7 +100,24 @@ impl RuntimeRegistry {
             &settings,
             process_control,
         ) {
-            Ok(session) => {
+            Ok(mut session) => {
+                let startup = json!({"actions": session.take_startup_actions()});
+                if let Err(error) = execute_result_actions(&startup) {
+                    if let Err(termination) = session.terminate() {
+                        let error = Error::with_details(
+                            "host_start_failed",
+                            error.to_string(),
+                            json!({
+                                "startup_action_error": error.body(),
+                                "termination_error": termination.body(),
+                            }),
+                        );
+                        slot.fail(error.body());
+                        return Err(error);
+                    }
+                    slot.fail(error.body());
+                    return Err(error);
+                }
                 slot.session = Some(session);
                 slot.phase = Phase::Running;
                 slot.failure = None;

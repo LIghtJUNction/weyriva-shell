@@ -36,6 +36,14 @@ pub struct Provider {
     pub debounce_ms: u64,
     #[serde(default)]
     pub categories: Vec<Category>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<Service>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Service {
+    pub id: String,
+    pub entry: String,
 }
 
 impl Provider {
@@ -156,6 +164,10 @@ pub struct HostResponse {
 pub struct HostEvent {
     pub protocol: String,
     pub event: String,
+    #[serde(default)]
+    pub actions: Vec<JsonValue>,
+    #[serde(default)]
+    pub error: Option<crate::error::ErrorBody>,
 }
 
 #[derive(Clone, Debug, Serialize)]

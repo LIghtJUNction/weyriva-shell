@@ -12,9 +12,10 @@ use crate::config::{HostConfig, MAX_PLUGIN_DATA_BYTES, read_plugin_file};
 use crate::error::{HostError, HostResult, from_lua};
 use crate::model::{Action, MAX_QUERY_BYTES, check_string, push_action};
 use state::create_state_api;
+pub(in crate::runtime) use state::{SharedState, StateWatchers};
 
 const MAX_STATE_KEY_BYTES: usize = 256;
-const KNOWN_CALLBACK_GLOBALS: &[&str] = &["onQuery", "onActivate", "onIpc", "onExit"];
+const KNOWN_CALLBACK_GLOBALS: &[&str] = &["onQuery", "onActivate", "onIpc", "onExit", "update"];
 
 pub(super) fn install(
     lua: &Lua,
@@ -22,8 +23,10 @@ pub(super) fn install(
     actions: Rc<RefCell<Vec<Action>>>,
     launcher_results: Rc<RefCell<Option<PendingLauncherModel>>>,
     invocation: Rc<Cell<Invocation>>,
-) -> HostResult<()> {
-    let noctalia = create_noctalia_api(lua, config, Rc::clone(&actions))?;
+    shared_state: &SharedState,
+) -> HostResult<StateWatchers> {
+    let (noctalia, state_watchers) =
+        create_noctalia_api(lua, config, Rc::clone(&actions), shared_state)?;
     let launcher = create_launcher_api(lua, actions, launcher_results, invocation)?;
     let globals = lua.globals();
     globals
@@ -32,14 +35,16 @@ pub(super) fn install(
     globals
         .set("launcher", launcher)
         .map_err(|error| from_lua(&error, "runtime_init"))?;
-    install_unsupported_index(lua, &globals, "global", KNOWN_CALLBACK_GLOBALS)
+    install_unsupported_index(lua, &globals, "global", KNOWN_CALLBACK_GLOBALS)?;
+    Ok(state_watchers)
 }
 
 fn create_noctalia_api(
     lua: &Lua,
     config: &HostConfig,
     actions: Rc<RefCell<Vec<Action>>>,
-) -> HostResult<Table> {
+    shared_state: &SharedState,
+) -> HostResult<(Table, StateWatchers)> {
     let noctalia = lua
         .create_table()
         .map_err(|error| from_lua(&error, "runtime_init"))?;
@@ -50,8 +55,9 @@ fn create_noctalia_api(
     noctalia
         .set("json", create_json_api(lua)?)
         .map_err(|error| from_lua(&error, "runtime_init"))?;
+    let (state, state_watchers) = create_state_api(lua, shared_state)?;
     noctalia
-        .set("state", create_state_api(lua)?)
+        .set("state", state)
         .map_err(|error| from_lua(&error, "runtime_init"))?;
     install_clipboard_api(lua, &noctalia, Rc::clone(&actions))?;
     install_notification_api(
@@ -63,7 +69,7 @@ fn create_noctalia_api(
     )?;
     install_notification_api(lua, &noctalia, "notifyError", actions, Action::notify_error)?;
     install_unsupported_index(lua, &noctalia, "noctalia", &[])?;
-    Ok(noctalia)
+    Ok((noctalia, state_watchers))
 }
 
 fn install_core_api(lua: &Lua, config: &HostConfig, noctalia: &Table) -> HostResult<()> {

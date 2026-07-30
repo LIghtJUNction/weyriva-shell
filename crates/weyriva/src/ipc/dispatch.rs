@@ -31,6 +31,7 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "weyriva.plugin.v1.uninstall",
     "weyriva.plugin.v1.query",
     "weyriva.plugin.v1.activate",
+    "weyriva.plugin.v1.ipc",
 ];
 
 pub struct Dispatcher<'a> {
@@ -137,6 +138,7 @@ impl<'a> Dispatcher<'a> {
             "status" => (&[], &["id"]),
             "query" => (&["provider", "query"], &[]),
             "activate" => (&["provider", "result_id"], &[]),
+            "ipc" => (&["entry", "event", "payload"], &[]),
             _ => {
                 return Err(Error::new(
                     "method_not_found",
@@ -164,6 +166,13 @@ impl<'a> Dispatcher<'a> {
             "activate" => self
                 .broker
                 .activate(string(object, "provider")?, string(object, "result_id")?),
+            "ipc" => self.broker.ipc(
+                string(object, "entry")?,
+                string(object, "event")?,
+                object
+                    .get("payload")
+                    .ok_or_else(|| Error::new("invalid_params", "payload is required"))?,
+            ),
             _ => Err(Error::new("method_not_found", "unknown plugin method")),
         }
     }

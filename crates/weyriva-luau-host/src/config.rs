@@ -13,8 +13,27 @@ pub(crate) const MAX_PLUGIN_DATA_BYTES: usize = 1_024 * 1_024;
 #[derive(Clone, Debug)]
 pub struct HostConfig {
     pub(crate) plugin_dir: PathBuf,
+    pub(crate) entry_id: String,
     pub(crate) entry_path: PathBuf,
+    pub(crate) service: Option<ServiceConfig>,
     pub(crate) settings: JsonValue,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ServiceConfig {
+    pub(crate) id: String,
+    pub(crate) entry_path: PathBuf,
+}
+
+#[derive(Default)]
+struct CliArgs {
+    plugin_dir: Option<String>,
+    entry: Option<String>,
+    entry_id: Option<String>,
+    kind: Option<String>,
+    service_id: Option<String>,
+    service_entry: Option<String>,
+    settings_json: Option<String>,
 }
 
 impl HostConfig {
@@ -26,45 +45,15 @@ impl HostConfig {
     /// entry kind is unsupported, settings are invalid, or either path escapes
     /// the canonical plugin directory.
     pub fn from_args(args: impl IntoIterator<Item = OsString>) -> HostResult<Self> {
-        let mut plugin_dir = None;
-        let mut entry = None;
-        let mut kind = None;
-        let mut settings_json = None;
-        let mut args = args.into_iter();
-
-        while let Some(argument) = args.next() {
-            let argument = argument
-                .into_string()
-                .map_err(|_| HostError::new("invalid_cli", "CLI arguments must be valid UTF-8"))?;
-            let value = match argument.as_str() {
-                "--plugin-dir" | "--entry" | "--kind" | "--settings-json" => args
-                    .next()
-                    .ok_or_else(|| {
-                        HostError::new("invalid_cli", format!("missing value for `{argument}`"))
-                    })?
-                    .into_string()
-                    .map_err(|_| HostError::new("invalid_cli", "CLI values must be valid UTF-8"))?,
-                "--help" | "-h" => {
-                    return Err(HostError::new(
-                        "help",
-                        "usage: weyriva-luau-host --plugin-dir ABSOLUTE --entry RELATIVE --kind launcher_provider --settings-json JSON",
-                    ));
-                }
-                _ => {
-                    return Err(HostError::new(
-                        "invalid_cli",
-                        format!("unknown argument `{argument}`"),
-                    ));
-                }
-            };
-            match argument.as_str() {
-                "--plugin-dir" => set_once(&mut plugin_dir, value, "--plugin-dir")?,
-                "--entry" => set_once(&mut entry, value, "--entry")?,
-                "--kind" => set_once(&mut kind, value, "--kind")?,
-                "--settings-json" => set_once(&mut settings_json, value, "--settings-json")?,
-                _ => unreachable!(),
-            }
-        }
+        let CliArgs {
+            plugin_dir,
+            entry,
+            entry_id,
+            kind,
+            service_id,
+            service_entry,
+            settings_json,
+        } = parse_cli(args)?;
 
         let plugin_dir =
             plugin_dir.ok_or_else(|| HostError::new("invalid_cli", "missing `--plugin-dir`"))?;
@@ -76,6 +65,27 @@ impl HostConfig {
                 format!("entry kind `{kind}` is not implemented"),
             ));
         }
+        let entry_id = entry_id.unwrap_or_else(|| "launcher".to_owned());
+        validate_entry_id(&entry_id, "launcher")?;
+        let service = match (service_id, service_entry) {
+            (None, None) => None,
+            (Some(id), Some(entry)) => {
+                validate_entry_id(&id, "service")?;
+                if id == entry_id {
+                    return Err(HostError::new(
+                        "invalid_cli",
+                        "launcher and service entry ids must be unique",
+                    ));
+                }
+                Some((id, entry))
+            }
+            _ => {
+                return Err(HostError::new(
+                    "invalid_cli",
+                    "`--service-id` and `--service-entry` must be provided together",
+                ));
+            }
+        };
         let settings_json = settings_json.unwrap_or_else(|| "{}".to_owned());
         if settings_json.len() > MAX_SETTINGS_BYTES {
             return Err(HostError::new(
@@ -116,22 +126,97 @@ impl HostConfig {
             ));
         }
 
-        let entry = PathBuf::from(entry);
-        validate_relative_path(&entry, "entry")?;
-        let entry_path = resolve_plugin_file(&plugin_dir, &entry)?;
-        if entry_path.extension().and_then(|value| value.to_str()) != Some("luau") {
-            return Err(HostError::new(
-                "invalid_entry",
-                "entry filename must end in `.luau`",
-            ));
-        }
+        let entry_path = resolve_luau_entry(&plugin_dir, &entry, "entry")?;
+        let service = service
+            .map(|(id, entry)| -> HostResult<ServiceConfig> {
+                Ok(ServiceConfig {
+                    id,
+                    entry_path: resolve_luau_entry(&plugin_dir, &entry, "service entry")?,
+                })
+            })
+            .transpose()?;
 
         Ok(Self {
             plugin_dir,
+            entry_id,
             entry_path,
+            service,
             settings,
         })
     }
+}
+
+fn parse_cli(args: impl IntoIterator<Item = OsString>) -> HostResult<CliArgs> {
+    let mut parsed = CliArgs::default();
+    let mut args = args.into_iter();
+    while let Some(argument) = args.next() {
+        let argument = argument
+            .into_string()
+            .map_err(|_| HostError::new("invalid_cli", "CLI arguments must be valid UTF-8"))?;
+        if matches!(argument.as_str(), "--help" | "-h") {
+            return Err(HostError::new(
+                "help",
+                "usage: weyriva-luau-host --plugin-dir ABSOLUTE --entry RELATIVE [--entry-id ID] --kind launcher_provider [--service-id ID --service-entry RELATIVE] --settings-json JSON",
+            ));
+        }
+        let value = args
+            .next()
+            .ok_or_else(|| {
+                HostError::new("invalid_cli", format!("missing value for `{argument}`"))
+            })?
+            .into_string()
+            .map_err(|_| HostError::new("invalid_cli", "CLI values must be valid UTF-8"))?;
+        let slot = match argument.as_str() {
+            "--plugin-dir" => &mut parsed.plugin_dir,
+            "--entry" => &mut parsed.entry,
+            "--entry-id" => &mut parsed.entry_id,
+            "--kind" => &mut parsed.kind,
+            "--service-id" => &mut parsed.service_id,
+            "--service-entry" => &mut parsed.service_entry,
+            "--settings-json" => &mut parsed.settings_json,
+            _ => {
+                return Err(HostError::new(
+                    "invalid_cli",
+                    format!("unknown argument `{argument}`"),
+                ));
+            }
+        };
+        set_once(slot, value, &argument)?;
+    }
+    Ok(parsed)
+}
+
+fn validate_entry_id(value: &str, kind: &str) -> HostResult<()> {
+    let valid = !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
+        && value
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric);
+    if valid {
+        Ok(())
+    } else {
+        Err(HostError::new(
+            "invalid_cli",
+            format!("{kind} entry id is invalid"),
+        ))
+    }
+}
+
+fn resolve_luau_entry(plugin_dir: &Path, raw_entry: &str, label: &str) -> HostResult<PathBuf> {
+    let entry = PathBuf::from(raw_entry);
+    validate_relative_path(&entry, label)?;
+    let entry_path = resolve_plugin_file(plugin_dir, &entry)?;
+    if entry_path.extension().and_then(|value| value.to_str()) != Some("luau") {
+        return Err(HostError::new(
+            "invalid_entry",
+            format!("{label} filename must end in `.luau`"),
+        ));
+    }
+    Ok(entry_path)
 }
 
 pub(crate) fn read_plugin_file(plugin_dir: &Path, relative_path: &str) -> HostResult<String> {

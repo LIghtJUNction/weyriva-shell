@@ -36,14 +36,40 @@ struct ActivateParams {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct IpcParams {
+    #[serde(default)]
+    entry: Option<String>,
     event: String,
     #[serde(default)]
     payload: JsonValue,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpdateParams {
+    entry: String,
+}
+
 /// Builds the first event emitted by a successfully loaded host.
 #[must_use]
-pub fn ready_event() -> JsonValue {
+pub fn ready_event(host: &Host) -> JsonValue {
+    let actions = host.take_startup_actions();
+    if let Some(service_id) = host.service_id() {
+        return json!({
+            "protocol": PROTOCOL_VERSION,
+            "event": "ready",
+            "kind": "plugin",
+            "entries": [
+                {"id": host.launcher_id(), "kind": "launcher_provider"},
+                {"id": service_id, "kind": "service"}
+            ],
+            "capability": {
+                "api": 3,
+                "subset": "launcher_provider+service",
+                "complete": false
+            },
+            "actions": actions
+        });
+    }
     json!({
         "protocol": PROTOCOL_VERSION,
         "event": "ready",
@@ -72,7 +98,7 @@ pub fn fatal_event(error: &HostError) -> JsonValue {
 ///
 /// Returns an I/O error when stdin cannot be read or stdout cannot be written.
 pub fn serve(host: &Host, input: &mut impl BufRead, output: &mut impl Write) -> io::Result<()> {
-    write_message(output, &ready_event(), None)?;
+    write_message(output, &ready_event(host), None)?;
     loop {
         match read_bounded_line(input)? {
             LineRead::End => return Ok(()),
@@ -176,9 +202,19 @@ fn process_line(host: &Host, line: &[u8]) -> (JsonValue, bool) {
             })
         }),
         "ipc" => parse_params::<IpcParams>(request.params).and_then(|params| {
-            host.ipc(params.event, &params.payload).map(|invocation| {
+            host.ipc(params.entry.as_deref(), params.event, &params.payload)
+                .map(|invocation| {
+                    json!({
+                        "value": invocation.value,
+                        "actions": invocation.actions
+                    })
+                })
+        }),
+        "update" => parse_params::<UpdateParams>(request.params).and_then(|params| {
+            let entry = params.entry;
+            host.update(&entry).map(|invocation| {
                 json!({
-                    "value": invocation.value,
+                    "updated": entry,
                     "actions": invocation.actions
                 })
             })

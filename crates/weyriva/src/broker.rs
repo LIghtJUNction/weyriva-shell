@@ -309,7 +309,7 @@ impl Broker {
         if query.len() > 4_096 {
             return Err(Error::new("invalid_query", "query exceeds 4096 bytes"));
         }
-        let result = self.host_request(reference, "query", json!({"query": query}))?;
+        let result = self.launcher_request(reference, "query", json!({"query": query}))?;
         validate_query(&result, query)?;
         let action_results = execute_result_actions(&result)?;
         let mut object = result
@@ -324,7 +324,7 @@ impl Broker {
         if result_id.is_empty() || result_id.len() > 256 {
             return Err(Error::new("invalid_result", "result id is invalid"));
         }
-        let result = self.host_request(reference, "activate", json!({"id": result_id}))?;
+        let result = self.launcher_request(reference, "activate", json!({"id": result_id}))?;
         if result.get("activated").and_then(JsonValue::as_str) != Some(result_id) {
             return Err(Error::new(
                 "host_protocol",
@@ -336,6 +336,38 @@ impl Broker {
             .as_object()
             .cloned()
             .ok_or_else(|| Error::new("host_protocol", "activate result is not an object"))?;
+        object.insert("action_results".to_owned(), action_results);
+        Ok(JsonValue::Object(object))
+    }
+
+    pub fn ipc(&mut self, reference: &str, event: &str, payload: &JsonValue) -> Result<JsonValue> {
+        if event.is_empty() || event.len() > 256 {
+            return Err(Error::new("invalid_event", "IPC event is invalid"));
+        }
+        let (plugin_id, entry_id) = parse_reference(reference)?;
+        let (_, record) = self.record(plugin_id)?;
+        let known_entry = record.provider.entry_id == entry_id
+            || record
+                .provider
+                .service
+                .as_ref()
+                .is_some_and(|service| service.id == entry_id);
+        if !known_entry {
+            return Err(Error::new("entry_not_found", "unknown plugin entry"));
+        }
+        if !record.enabled {
+            return Err(Error::new("plugin_disabled", "plugin is disabled"));
+        }
+        let result = self.runtime.request(
+            &record,
+            "ipc",
+            json!({"entry": entry_id, "event": event, "payload": payload}),
+        )?;
+        let action_results = execute_result_actions(&result)?;
+        let mut object = result
+            .as_object()
+            .cloned()
+            .ok_or_else(|| Error::new("host_protocol", "IPC result is not an object"))?;
         object.insert("action_results".to_owned(), action_results);
         Ok(JsonValue::Object(object))
     }
@@ -365,7 +397,7 @@ impl Broker {
         Ok((state, record))
     }
 
-    fn host_request(
+    fn launcher_request(
         &mut self,
         reference: &str,
         method: &str,

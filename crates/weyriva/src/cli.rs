@@ -154,6 +154,13 @@ enum PluginCommand {
         provider: String,
         result_id: String,
     },
+    #[command(hide = true)]
+    Ipc {
+        entry: String,
+        event: String,
+        #[arg(long, default_value = "{}", value_parser = parse_json)]
+        payload: JsonValue,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -309,6 +316,14 @@ fn plugin_request(command: PluginCommand) -> (&'static str, JsonValue) {
         } => (
             "weyriva.plugin.v1.activate",
             json!({"provider": provider, "result_id": result_id}),
+        ),
+        PluginCommand::Ipc {
+            entry,
+            event,
+            payload,
+        } => (
+            "weyriva.plugin.v1.ipc",
+            json!({"entry": entry, "event": event, "payload": payload}),
         ),
     }
 }

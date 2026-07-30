@@ -20,6 +20,7 @@ pub struct HostSession {
     stdout: BufReader<ChildStdout>,
     request_id: u64,
     process_control: Arc<dyn ProcessControl>,
+    startup_actions: Vec<JsonValue>,
 }
 
 /// Fallible child-process operations used to prove host termination.
@@ -98,17 +99,26 @@ impl HostSession {
         process_control: Arc<dyn ProcessControl>,
     ) -> Result<Self> {
         let settings_json = serde_json::to_string(settings)?;
-        let mut child = Command::new(executable)
-            .args([
-                "--plugin-dir",
-                &plugin_dir.display().to_string(),
-                "--entry",
-                &provider.entry,
-                "--kind",
-                "launcher_provider",
-                "--settings-json",
-                &settings_json,
-            ])
+        let mut command = Command::new(executable);
+        command
+            .arg("--plugin-dir")
+            .arg(plugin_dir)
+            .arg("--entry")
+            .arg(&provider.entry)
+            .arg("--entry-id")
+            .arg(&provider.entry_id)
+            .arg("--kind")
+            .arg("launcher_provider")
+            .arg("--settings-json")
+            .arg(&settings_json);
+        if let Some(service) = &provider.service {
+            command
+                .arg("--service-id")
+                .arg(&service.id)
+                .arg("--service-entry")
+                .arg(&service.entry);
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -128,16 +138,31 @@ impl HostSession {
             stdout: BufReader::new(stdout),
             request_id: 0,
             process_control,
+            startup_actions: Vec::new(),
         };
         let ready: HostEvent = session.read_json(HOST_TIMEOUT)?;
         if ready.protocol != HOST_PROTOCOL || ready.event != "ready" {
-            let _ = session.terminate();
-            return Err(Error::new(
-                "host_protocol",
-                "plugin host did not emit the expected ready event",
-            ));
+            let startup_error = ready.error.map_or_else(
+                || {
+                    Error::new(
+                        "host_protocol",
+                        "plugin host did not emit the expected ready event",
+                    )
+                },
+                |error| match error.details {
+                    Some(details) => Error::with_details(error.code, error.message, details),
+                    None => Error::new(error.code, error.message),
+                },
+            );
+            session.terminate()?;
+            return Err(startup_error);
         }
+        session.startup_actions = ready.actions;
         Ok(session)
+    }
+
+    pub fn take_startup_actions(&mut self) -> JsonValue {
+        JsonValue::Array(self.startup_actions.drain(..).collect())
     }
 
     /// Polls the child without blocking.

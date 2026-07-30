@@ -44,6 +44,15 @@ for line in sys.stdin:
                 }],
                 "actions": [],
             }
+    elif method == "ipc":
+        result = {
+            "value": {
+                "entry": params["entry"],
+                "event": params["event"],
+                "payload": params["payload"],
+            },
+            "actions": [],
+        }
     else:
         result = {}
     emit({
