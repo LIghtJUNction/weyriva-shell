@@ -14,6 +14,9 @@ roadmap is an acceptance sequence, not a list of completed marketing claims.
 - locally tested Rust plugin core and bounded Luau host for the API 3
   single-launcher-provider vertical slice, with fixture and pinned official
   Kaomoji evidence;
+- first pinned v4 QML `kaomoji-provider` slice (`main` + `launcherProvider`)
+  running in the independent Quickshell compatibility host, with local query,
+  activation, handler-alias, and failure-isolation evidence;
 - Rust startup, shell, session, diagnosis, resident daemon, and plugin control;
 - one-command and AUR-recipe build/package wiring for both Rust binaries;
 - independently reviewed UI iteration 3 shell/greeter source; XRY previews
@@ -37,7 +40,7 @@ roadmap is an acceptance sequence, not a list of completed marketing claims.
 
 **Planned**
 
-- isolated v4 QML compatibility host;
+- the remaining v4 QML compatibility host surface and entry kinds;
 - clean Arch package build; AUR publication remains pending;
 - verified best-effort installers on other distributions;
 - complete accessibility matrix;
@@ -86,7 +89,9 @@ Exit: cold-boot and recovery matrix passes on target hardware.
   `noctalia-v5-luau/1` incrementally;
 - run self-authored fixtures for all six entry kinds, lifecycle, config, state,
   IPC, persistence, and error isolation;
-- implement the v4 QML host only after the Luau profile is stable.
+- extend the isolated v4 QML host from the pinned `main` + `launcherProvider`
+  slice to the remaining entry kinds only after each public ABI boundary has a
+  fixture and independent runtime evidence.
 
 Exit: the compatibility matrix records execution evidence, not catalog
 presence.

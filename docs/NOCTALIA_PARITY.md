@@ -58,7 +58,7 @@ be exercised.
 | Lane | Status | What is still required |
 |---|---|---|
 | Noctalia v5-compatible Luau | Rust API 3 single-launcher-provider slice passed locally and package-wired | clean installed-runtime evidence, remaining five entry kinds, APIs 4–19, full corpus and XRY |
-| Noctalia v4-compatible QML | Planned | isolated host, imports/context, render/input/settings/IPC |
+| Noctalia v4-compatible QML | First pinned `kaomoji-provider` `{main, launcherProvider}` slice implemented and locally tested | remaining entry kinds, full imports/context, render/input/settings/IPC matrix, and XRY |
 
 Catalog listing, manifest parsing, or copied files do not satisfy this table.
 See [plugin conformance fixtures](plugins/conformance-fixtures.md).

@@ -12,7 +12,7 @@ The product name is **Weyriva Plugins**. It has no `v5` product version;
 | Lane | Format | Host | Status |
 |---|---|---|---|
 | `noctalia-v5-luau/1` | `plugin.toml` + Luau | Rust `weyriva-luau-host` | API 3 single-launcher-provider slice locally tested and package-wired; target verification pending |
-| `noctalia-v4-qml/1` | `manifest.json` + QML | isolated Weyriva Quickshell host | Planned |
+| `noctalia-v4-qml/1` | `manifest.json` + QML | isolated Weyriva Quickshell host | First pinned `main` + `launcherProvider` slice implemented and locally tested |
 
 Compatibility means actual lifecycle, UI, settings, state, IPC, and error
 behavior. Manifest parsing, catalog listing, downloading, or copying files does
@@ -51,6 +51,9 @@ weyriva plugin status noctalia/kaomoji
 weyriva plugin reload noctalia/kaomoji
 weyriva plugin disable noctalia/kaomoji
 weyriva plugin uninstall noctalia/kaomoji
+
+# pinned v4 QML slice
+weyriva plugin install kaomoji-provider --profile noctalia-v4-qml/1
 ```
 
 The Rust plugin core in `crates/weyriva/` owns ordered sources, immutable
@@ -87,8 +90,19 @@ The v4 profile loads QML entry points that depend on injected `pluginApi`,
 Quickshell modules, `qs.*` imports, settings, translations, services, and IPC.
 It therefore requires a real isolated compatibility host.
 
+The first passing v4 boundary is deliberately pinned to
+`kaomoji-provider` at the reviewed legacy-v4 baseline. It accepts only
+`main` plus `launcherProvider`, runs them in the separately launched
+`v4-host/` Quickshell process, translates the one copy-command facade, routes
+the provider's real `handleCommand`/`getResults` flow, and resolves the actual
+`plugin:kaomoji` handler target. Invalid QML fails the plugin lifecycle while
+the broker remains available. This is local runtime evidence, not a claim of
+full v4 compatibility.
+
 Weyriva will not load arbitrary v4 components into the core shell process.
-Parsing `manifest.json` or showing a card is not compatibility.
+Parsing `manifest.json` or showing a card is not compatibility. The remaining
+entry kinds, settings/services, translations, and full input/rendering matrix
+remain open gates.
 
 See [Noctalia v4 QML](plugins/noctalia-v4-qml.md).
 

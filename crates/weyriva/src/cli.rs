@@ -128,6 +128,8 @@ enum PluginCommand {
     Source(SourceArgs),
     Install {
         id: String,
+        #[arg(long, value_enum)]
+        profile: Option<PluginProfileArg>,
     },
     Status {
         id: Option<String>,
@@ -161,6 +163,23 @@ enum PluginCommand {
         #[arg(long, default_value = "{}", value_parser = parse_json)]
         payload: JsonValue,
     },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum PluginProfileArg {
+    #[value(name = "noctalia-v5-luau/1")]
+    V5Luau,
+    #[value(name = "noctalia-v4-qml/1")]
+    V4Qml,
+}
+
+impl PluginProfileArg {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::V5Luau => "noctalia-v5-luau/1",
+            Self::V4Qml => "noctalia-v4-qml/1",
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -297,7 +316,13 @@ fn plugin_request(command: PluginCommand) -> (&'static str, JsonValue) {
                 ("weyriva.plugin.v1.source.remove", json!({"name": name}))
             }
         },
-        PluginCommand::Install { id } => ("weyriva.plugin.v1.install", json!({"id": id})),
+        PluginCommand::Install { id, profile } => (
+            "weyriva.plugin.v1.install",
+            profile.map_or_else(
+                || json!({"id": id}),
+                |profile| json!({"id": id, "profile": profile.name()}),
+            ),
+        ),
         PluginCommand::Status { id } => (
             "weyriva.plugin.v1.status",
             id.map_or_else(|| json!({}), |id| json!({"id": id})),

@@ -4,12 +4,27 @@ Profile: `noctalia-v4-qml/1`
 
 Runtime owner: isolated Weyriva Quickshell host
 
-Status: planned
+Status: first pinned `main` + `launcherProvider` slice implemented and locally tested
 
 The v4 format is a QML component ABI, not merely a JSON manifest. Compatible
 plugins depend on injected context, Quickshell modules, `qs.*` imports,
 services, settings, translations, and IPC. Weyriva must execute them outside
 the core shell process.
+
+## Current passing boundary
+
+The first local runtime slice is the pinned `kaomoji-provider` at the
+legacy-v4 baseline. It accepts exactly `main` and `launcherProvider`, starts an
+independent Weyriva-owned Quickshell process, provides the narrow `pluginApi`,
+`qs.Commons.Logger`, and clipboard facade needed by that plugin, and keeps the
+core shell process free of plugin QML. The provider's command predicate,
+database-backed `getResults`, result activation, asynchronous `updateResults()`,
+and the real `plugin:kaomoji` handler alias are exercised. Malformed QML is
+contained as a plugin failure and does not take down the broker.
+
+This is local evidence for one concrete plugin shape. It is not full v4
+compatibility, and it does not claim rendering/input acceptance for arbitrary
+widgets, panels, settings, or desktop components.
 
 ## Package layout
 
@@ -46,6 +61,8 @@ directory and use lower-case kebab case.
 Optional fields include:
 
 - `minNoctaliaVersion`;
+- `tags`;
+- `official`;
 - `license`;
 - `repository`;
 - `dependencies.plugins`;

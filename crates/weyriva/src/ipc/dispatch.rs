@@ -4,6 +4,7 @@ use serde_json::{Map, Value as JsonValue, json};
 
 use crate::broker::Broker;
 use crate::error::{Error, Result};
+use crate::model::PluginProfile;
 use crate::niri::NiriClient;
 use crate::shell::ShellController;
 
@@ -134,7 +135,8 @@ impl<'a> Dispatcher<'a> {
             "source.list" => (&[], &[]),
             "source.add" => (&["name", "path"], &[]),
             "source.remove" => (&["name"], &[]),
-            "install" | "enable" | "disable" | "reload" | "uninstall" => (&["id"], &[]),
+            "install" => (&["id"], &["profile"]),
+            "enable" | "disable" | "reload" | "uninstall" => (&["id"], &[]),
             "status" => (&[], &["id"]),
             "query" => (&["provider", "query"], &[]),
             "activate" => (&["provider", "result_id"], &[]),
@@ -153,7 +155,15 @@ impl<'a> Dispatcher<'a> {
                 .broker
                 .source_add(string(object, "name")?, Path::new(string(object, "path")?)),
             "source.remove" => self.broker.source_remove(string(object, "name")?),
-            "install" => self.broker.install(string(object, "id")?),
+            "install" => {
+                if let Some(profile) = optional_string(object, "profile")? {
+                    let profile = serde_json::from_value::<PluginProfile>(json!(profile))
+                        .map_err(|_| Error::new("invalid_params", "profile is unsupported"))?;
+                    self.broker.install_profiled(string(object, "id")?, profile)
+                } else {
+                    self.broker.install(string(object, "id")?)
+                }
+            }
             "status" => serde_json::to_value(self.broker.status(optional_string(object, "id")?)?)
                 .map_err(Into::into),
             "enable" => self.broker.enable(string(object, "id")?),

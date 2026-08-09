@@ -45,6 +45,10 @@ Weyriva conformance test.
 
 ## v4 host
 
+- The pinned `kaomoji-provider` `{main, launcherProvider}` slice now loads in
+  an isolated Weyriva Quickshell process, returns database-backed results,
+  normalizes the documented copy command, routes the real handler alias, and
+  contains malformed QML locally. This evidence does not widen the profile.
 - exact creation and destruction order for all entry points;
 - minimum Quickshell import versions;
 - complete `qs.*` module and service façade;
@@ -60,7 +64,8 @@ Weyriva conformance test.
 
 - source/catalog UX has not passed accessibility acceptance;
 - the API 3 launcher host is verified locally without Noctalia installed, but
-  the other five v5 entry kinds and all v4 entry kinds remain unverified;
+  the other five v5 entry kinds and all v4 entry kinds beyond the pinned
+  `kaomoji-provider` slice remain unverified;
 - no representative compatibility fixture is verified on XRY;
 - no clean package install yet proves the package-wired Rust core and host are
   the active installed runtime;

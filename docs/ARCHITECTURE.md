@@ -45,7 +45,7 @@ That does not prove a clean package install or deployment of this revision.
 | Native shell IPC | Weyriva Shell | In progress |
 | Rust CLI, daemon, startup/session control, diagnose, Unix IPC | `crates/weyriva/` → `/usr/bin/weyriva` | Implemented and package-wired locally; installed-system verification pending |
 | API 3 launcher-provider host | `crates/weyriva-luau-host/` → `/usr/bin/weyriva-luau-host` | Implemented, locally tested, and package-wired; target verification pending |
-| Other plugin compatibility hosts | Weyriva | Planned |
+| v4 QML compatibility host | `v4-host/` + `crates/weyriva/src/v4_host_session.rs` | First pinned `main` + `launcherProvider` slice implemented and locally tested; remaining ABI planned |
 
 No two processes may own the same visible surface. Parallel bars, launchers,
 notification daemons, wallpaper hosts, or lockers are rejected because they
@@ -110,8 +110,8 @@ Weyriva-owned hosts:
 1. `crates/weyriva-luau-host/`, targeting `/usr/bin/weyriva-luau-host` and
    currently conformant only for the API 3 single-launcher-provider slice of
    `noctalia-v5-luau/1`;
-2. a planned isolated Quickshell/QML host for the documented Noctalia v4 public
-   ABI.
+2. `v4-host/`, an isolated Quickshell/QML host for the pinned first slice of the
+   documented Noctalia v4 public ABI. It is not yet a full v4 host.
 
 Python is repository test tooling only. It is not a production host, runtime
 dependency, compatibility profile, or plugin-authoring language.

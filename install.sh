@@ -19,6 +19,7 @@ for required_path in \
     "$SCRIPT_DIR/config/niri/config.kdl" \
     "$SCRIPT_DIR/shell/shell.qml" \
     "$SCRIPT_DIR/greeter/shell.qml" \
+    "$SCRIPT_DIR/v4-host/shell.qml" \
     "$SCRIPT_DIR/config/greetd/config.toml"; do
     [[ -f $required_path && ! -L $required_path ]] ||
         fail "incomplete or unsafe Weyriva checkout: $required_path"

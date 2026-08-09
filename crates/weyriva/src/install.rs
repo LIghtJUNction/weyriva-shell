@@ -8,19 +8,32 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
-use crate::manifest::{parse_plugin, valid_plugin_id};
-use crate::model::PluginRecord;
+use crate::manifest::valid_plugin_id;
+use crate::model::{PluginProfile, PluginRecord};
 use crate::paths::Paths;
-use crate::sources::{load_state, resolve};
+use crate::sources::{load_state, parse_candidate, resolve};
 use crate::storage::atomic_json;
 use crate::tree::{copy_tree, validate_and_hash};
 
 pub fn install(paths: &Paths, plugin_id: &str) -> Result<PluginRecord> {
-    if !valid_plugin_id(plugin_id) {
-        return Err(Error::new(
-            "invalid_plugin_id",
-            "plugin id must be canonical author/plugin",
-        ));
+    install_profiled(paths, plugin_id, PluginProfile::V5Luau)
+}
+
+pub fn install_profiled(
+    paths: &Paths,
+    plugin_id: &str,
+    profile: PluginProfile,
+) -> Result<PluginRecord> {
+    let valid_id = match profile {
+        PluginProfile::V5Luau => valid_plugin_id(plugin_id),
+        PluginProfile::V4Qml => plugin_id == "kaomoji-provider",
+    };
+    if !valid_id {
+        let requirement = match profile {
+            PluginProfile::V5Luau => "plugin id must be canonical author/plugin",
+            PluginProfile::V4Qml => "v4 profile supports only kaomoji-provider",
+        };
+        return Err(Error::new("invalid_plugin_id", requirement));
     }
     let mut state = load_state(paths)?;
     if state
@@ -42,14 +55,14 @@ pub fn install(paths: &Paths, plugin_id: &str) -> Result<PluginRecord> {
     fs::create_dir(&resolve_root)
         .map_err(|error| Error::io("cannot create plugin resolution directory", &error))?;
     let outcome = (|| {
-        let (candidate, provenance) = resolve(paths, plugin_id, &resolve_root)?;
+        let (candidate, provenance) = resolve(paths, plugin_id, &resolve_root, profile)?;
         let digest = validate_and_hash(&candidate.root)?;
         let plugin_parent = paths.data_dir.join("installed").join(plugin_id);
         fs::create_dir_all(&plugin_parent)
             .map_err(|error| Error::io("cannot create immutable plugin parent", &error))?;
         let version_dir = plugin_parent.join(&digest);
         if version_dir.exists() {
-            let existing = parse_plugin(&version_dir)?;
+            let existing = parse_candidate(&version_dir, profile)?;
             if existing.provider != candidate.provider
                 || existing.settings_defaults != candidate.settings_defaults
                 || validate_and_hash(&version_dir)? != digest
@@ -60,7 +73,7 @@ pub fn install(paths: &Paths, plugin_id: &str) -> Result<PluginRecord> {
                 ));
             }
         } else {
-            materialize(&candidate, &plugin_parent, &version_dir, &digest)?;
+            materialize(&candidate, &plugin_parent, &version_dir, &digest, profile)?;
         }
         let previous = state.plugins.get(plugin_id);
         let record = PluginRecord {
@@ -71,6 +84,8 @@ pub fn install(paths: &Paths, plugin_id: &str) -> Result<PluginRecord> {
             digest,
             version: candidate.provider.version.clone(),
             provider: candidate.provider,
+            profile: candidate.profile,
+            v4_runtime: candidate.v4_runtime,
             settings_defaults: candidate.settings_defaults,
             provenance,
             last_known_good: previous.and_then(|record| record.last_known_good.clone()),
@@ -91,11 +106,12 @@ fn materialize(
     parent: &Path,
     destination: &Path,
     digest: &str,
+    profile: PluginProfile,
 ) -> Result<()> {
     let stage = parent.join(format!(".stage-{}", std::process::id()));
     remove_private_tree_if_exists(&stage)?;
     copy_tree(&candidate.root, &stage)?;
-    let staged = parse_plugin(&stage)?;
+    let staged = parse_candidate(&stage, profile)?;
     if staged.provider != candidate.provider || validate_and_hash(&stage)? != digest {
         remove_private_tree_if_exists(&stage)?;
         return Err(Error::new(

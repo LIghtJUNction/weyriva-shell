@@ -16,6 +16,7 @@ SHARE_FILES = (
     "shell/shell.qml",
     "shell/Weyriva/Panel.qml",
     "greeter/shell.qml",
+    "v4-host/shell.qml",
     "config/weyriva/defaults.json",
 )
 SYSTEM_UNITS = (
@@ -48,6 +49,7 @@ def make_update_harness(temporary: Path) -> tuple[Path, Path, Path, dict[str, st
         "shell/shell.qml",
         "shell/Weyriva/Panel.qml",
         "greeter/shell.qml",
+        "v4-host/shell.qml",
         "config/weyriva/defaults.json",
     )
     for relative in source_files:

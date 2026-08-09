@@ -29,6 +29,8 @@ pub mod state_writer;
 pub mod storage;
 mod transaction;
 pub mod tree;
+pub mod v4_host_session;
+pub mod v4_manifest;
 mod validation;
 
 pub use broker::Broker;

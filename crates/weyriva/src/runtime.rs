@@ -7,7 +7,9 @@ use serde_json::{Value as JsonValue, json};
 use crate::actions;
 use crate::error::{Error, ErrorBody, Result};
 use crate::host_session::{HostSession, ProcessControl, SystemProcessControl};
-use crate::model::PluginRecord;
+use crate::model::{PluginProfile, PluginRecord};
+use crate::process::SystemProcess;
+use crate::v4_host_session::V4HostSession;
 
 const AUTOMATIC_RESTART_BUDGET: u8 = 1;
 
@@ -31,15 +33,60 @@ pub(crate) struct StopReport {
 
 pub(crate) struct RuntimeRegistry {
     executable: PathBuf,
+    quickshell: PathBuf,
+    v4_host: PathBuf,
+    runtime_root: PathBuf,
     process_control: Arc<dyn ProcessControl>,
     slots: BTreeMap<String, HostSlot>,
 }
 
 struct HostSlot {
-    session: Option<HostSession>,
+    session: Option<PluginSession>,
     phase: Phase,
     failure: Option<ErrorBody>,
     automatic_restarts_remaining: u8,
+}
+
+enum PluginSession {
+    V5(HostSession),
+    V4(V4HostSession),
+}
+
+impl PluginSession {
+    fn take_startup_actions(&mut self) -> JsonValue {
+        match self {
+            Self::V5(session) => session.take_startup_actions(),
+            Self::V4(session) => session.take_startup_actions(),
+        }
+    }
+
+    fn has_exited(&mut self) -> Result<bool> {
+        match self {
+            Self::V5(session) => session.has_exited(),
+            Self::V4(session) => session.has_exited(),
+        }
+    }
+
+    fn request(&mut self, method: &str, params: JsonValue) -> Result<JsonValue> {
+        match self {
+            Self::V5(session) => session.request(method, params),
+            Self::V4(session) => session.request(method, params),
+        }
+    }
+
+    fn shutdown(&mut self) -> Result<JsonValue> {
+        match self {
+            Self::V5(session) => session.shutdown(),
+            Self::V4(session) => session.shutdown(),
+        }
+    }
+
+    fn terminate(&mut self) -> Result<()> {
+        match self {
+            Self::V5(session) => session.terminate(),
+            Self::V4(session) => session.terminate(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -52,16 +99,33 @@ enum Phase {
 }
 
 impl RuntimeRegistry {
-    pub fn new(executable: PathBuf) -> Self {
-        Self::with_process_control(executable, Arc::new(SystemProcessControl))
+    pub fn new(
+        executable: PathBuf,
+        quickshell: PathBuf,
+        v4_host: PathBuf,
+        runtime_root: PathBuf,
+    ) -> Self {
+        Self::with_process_control(
+            executable,
+            quickshell,
+            v4_host,
+            runtime_root,
+            Arc::new(SystemProcessControl),
+        )
     }
 
     pub fn with_process_control(
         executable: PathBuf,
+        quickshell: PathBuf,
+        v4_host: PathBuf,
+        runtime_root: PathBuf,
         process_control: Arc<dyn ProcessControl>,
     ) -> Self {
         Self {
             executable,
+            quickshell,
+            v4_host,
+            runtime_root,
             process_control,
             slots: BTreeMap::new(),
         }
@@ -75,6 +139,9 @@ impl RuntimeRegistry {
         let reference = record.provider.reference();
         self.reconcile(&reference)?;
         let executable = &self.executable;
+        let quickshell = &self.quickshell;
+        let v4_host = &self.v4_host;
+        let runtime_root = &self.runtime_root;
         let process_control = Arc::clone(&self.process_control);
         let slot = self.slots.entry(reference.clone()).or_default();
         if slot.session.is_some() {
@@ -93,13 +160,34 @@ impl RuntimeRegistry {
         }
         slot.phase = Phase::Starting;
         let settings = serde_json::to_value(&record.settings_defaults)?;
-        match HostSession::start_with_process_control(
-            executable,
-            &record.path,
-            &record.provider,
-            &settings,
-            process_control,
-        ) {
+        let session = match record.profile {
+            PluginProfile::V5Luau => HostSession::start_with_process_control(
+                executable,
+                &record.path,
+                &record.provider,
+                &settings,
+                process_control,
+            )
+            .map(PluginSession::V5),
+            PluginProfile::V4Qml => record
+                .v4_runtime
+                .as_ref()
+                .ok_or_else(|| Error::new("unsafe_state", "v4 runtime metadata is missing"))
+                .and_then(|runtime| {
+                    V4HostSession::start_with_boundaries(
+                        quickshell,
+                        v4_host,
+                        runtime_root,
+                        &record.id,
+                        &record.path,
+                        runtime,
+                        process_control,
+                        Arc::new(SystemProcess),
+                    )
+                    .map(PluginSession::V4)
+                }),
+        };
+        match session {
             Ok(mut session) => {
                 let startup = json!({"actions": session.take_startup_actions()});
                 if let Err(error) = execute_result_actions(&startup) {
@@ -208,7 +296,7 @@ impl RuntimeRegistry {
         let outcome = slot
             .session
             .as_mut()
-            .map(HostSession::has_exited)
+            .map(PluginSession::has_exited)
             .transpose();
         match outcome {
             Ok(Some(false) | None) => Ok(()),

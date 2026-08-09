@@ -53,7 +53,7 @@ classify_system_install() {
         /usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png
         /usr/share/wayland-sessions/weyriva.desktop
     )
-    local -a source_trees=(shell greeter config/weyriva)
+    local -a source_trees=(shell greeter v4-host config/weyriva)
     local -a explicit_sources=(
         config/niri/config.kdl
         config/greetd/config.toml

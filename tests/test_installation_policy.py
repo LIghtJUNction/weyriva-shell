@@ -110,6 +110,7 @@ class InstallationPolicyTests(unittest.TestCase):
         self.assertNotIn("\tdepends = python\n", srcinfo)
         self.assertIn('cp -a shell "$pkgdir/usr/share/weyriva/"', package)
         self.assertIn('cp -a greeter "$pkgdir/usr/share/weyriva/"', package)
+        self.assertIn('cp -a v4-host "$pkgdir/usr/share/weyriva/"', package)
         self.assertIn('cp -a config/weyriva "$pkgdir/usr/share/weyriva/config/"', package)
         self.assertNotIn("noctalia", package.lower())
         self.assertNotIn("noctalia", srcinfo.lower())
@@ -161,10 +162,17 @@ class InstallationPolicyTests(unittest.TestCase):
                 ROOT / "shell/Weyriva/WallpaperSurface.qml",
             ),
             "greeter": (ROOT / "greeter/shell.qml",),
+            "v4-host": (
+                ROOT / "v4-host/shell.qml",
+                ROOT / "v4-host/facade/Compat/qmldir",
+                ROOT / "v4-host/facade/Compat/Quickshell.qml",
+                ROOT / "v4-host/facade/qs/Commons/qmldir",
+                ROOT / "v4-host/facade/qs/Commons/Logger.qml",
+            ),
             "config/weyriva": (ROOT / "config/weyriva/defaults.json",),
         }
         self.assertIn(
-            'for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/config/weyriva"',
+            'for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/v4-host" "$ROOT/config/weyriva"',
             installer,
         )
         self.assertIn('"/usr/share/weyriva/$relative"', installer)
@@ -176,6 +184,7 @@ class InstallationPolicyTests(unittest.TestCase):
         installer = (ROOT / "scripts/install.sh").read_text()
         self.assertIn('install_tree "$WEYRIVA_ROOT/config/weyriva" "$CONFIG_HOME/weyriva"', installer)
         self.assertIn('install_tree "$WEYRIVA_ROOT/shell" "$DATA_HOME/weyriva/shell"', installer)
+        self.assertIn('install_tree "$WEYRIVA_ROOT/v4-host" "$DATA_HOME/weyriva/v4-host"', installer)
         self.assertNotIn('install_tree "$WEYRIVA_ROOT/greeter"', installer)
         self.assertNotIn("systemd/user", installer)
 
