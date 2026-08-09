@@ -10,6 +10,7 @@ pub const PLUGIN_API: u32 = 3;
 pub const CONTROL_PROTOCOL: u32 = 1;
 pub const HOST_PROTOCOL: &str = "weyriva-luau-host/1";
 pub const COMPATIBILITY_PROFILE: &str = "noctalia-v5-luau/1";
+pub const V4_COMPATIBILITY_PROFILE: &str = "noctalia-v4-qml/1";
 pub const MAX_LINE_BYTES: usize = 64 * 1024;
 pub const MAX_FILES: usize = 512;
 pub const MAX_TREE_BYTES: u64 = 16 * 1024 * 1024;
@@ -58,6 +59,24 @@ pub struct Candidate {
     pub root: PathBuf,
     pub provider: Provider,
     pub settings_defaults: BTreeMap<String, JsonValue>,
+    pub profile: PluginProfile,
+    pub v4_runtime: Option<V4Runtime>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum PluginProfile {
+    #[default]
+    #[serde(rename = "noctalia-v5-luau/1")]
+    V5Luau,
+    #[serde(rename = "noctalia-v4-qml/1")]
+    V4Qml,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct V4Runtime {
+    pub main: String,
+    pub launcher_provider: String,
+    pub handler_target: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -100,6 +119,10 @@ pub struct PluginRecord {
     pub digest: String,
     pub version: String,
     pub provider: Provider,
+    #[serde(default)]
+    pub profile: PluginProfile,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub v4_runtime: Option<V4Runtime>,
     pub settings_defaults: BTreeMap<String, JsonValue>,
     pub provenance: Provenance,
     pub last_known_good: Option<String>,

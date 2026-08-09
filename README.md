@@ -19,10 +19,14 @@ Weyriva does not reimplement PAM.
 > not evidence of an AUR publication or an XRY deployment. The exact
 > `noctalia-v5-luau/1` API 3 single-launcher-provider slice is locally tested,
 > including pinned official Kaomoji evidence and provider categories carried
-> to QML. XRY has the approved UI iteration 3 shell/greeter preview and retains
-> the previously deployed control-plane milestone, but not this all-Rust
-> cutover. The other five entry kinds, APIs 4–19, v4 QML host, complete native
-> surfaces, clean-package evidence, and full XRY acceptance remain incomplete.
+> to QML. The first pinned `noctalia-v4-qml/1` slice (`kaomoji-provider` with
+> `main` plus `launcherProvider`) is also implemented and exercised locally in
+> an isolated Weyriva Quickshell host; it is not a claim of full v4 support.
+> XRY has the approved UI iteration 3 shell/greeter preview and retains the
+> previously deployed control-plane milestone, but not this all-Rust cutover.
+> The other five entry kinds, APIs 4–19, remaining v4 entry kinds, complete
+> native surfaces, clean-package evidence, and full XRY acceptance remain
+> incomplete.
 > See the
 > [compatibility ledger](docs/NOCTALIA_PARITY.md).
 
@@ -124,11 +128,13 @@ bridge renders only validated result data. Local installers and package
 metadata consume this Rust control plane; installed-machine and XRY behavior
 remain separate evidence gates.
 
-The current compatibility claim is deliberately narrow: API 3, exactly one
-launcher-provider entry, verified locally with self-authored fixtures and the
-pinned official Kaomoji plugin. Provider categories reach the QML launcher.
-It is not a claim that the other five Noctalia entry kinds, APIs 4–19, or the
-v4 QML profile work.
+The current compatibility claims are deliberately narrow: API 3 with exactly
+one launcher-provider plus optional service entry, and the pinned v4
+`kaomoji-provider` `{main, launcherProvider}` slice. Both are verified only by
+local fixtures/runtime probes. Provider categories reach the QML launcher;
+v4 results, activation, real handler aliases, and failure isolation are
+exercised in the isolated host. This is not a claim that the other five v5
+entry kinds, APIs 4–19, or the remaining v4 entry kinds work.
 
 Noctalia is used only as a pinned public behavior and plugin-ABI reference.
 Weyriva must implement compatible behavior itself; catalog discovery or

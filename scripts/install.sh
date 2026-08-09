@@ -22,6 +22,7 @@ install_file \
 install_tree "$WEYRIVA_ROOT/config/niri" "$CONFIG_HOME/niri"
 install_tree "$WEYRIVA_ROOT/config/weyriva" "$CONFIG_HOME/weyriva"
 install_tree "$WEYRIVA_ROOT/shell" "$DATA_HOME/weyriva/shell"
+install_tree "$WEYRIVA_ROOT/v4-host" "$DATA_HOME/weyriva/v4-host"
 install_file \
     "$WEYRIVA_ROOT/assets/wallpapers/weyriva-cactus.png" \
     "$DATA_HOME/weyriva/wallpapers/light/weyriva-cactus.png"

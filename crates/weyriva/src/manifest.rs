@@ -7,7 +7,7 @@ use serde_json::Value as JsonValue;
 use toml::Value as TomlValue;
 
 use crate::error::{Error, Result};
-use crate::model::{Candidate, Category, PLUGIN_API, Provider, Service};
+use crate::model::{Candidate, Category, PLUGIN_API, PluginProfile, Provider, Service};
 
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
@@ -178,6 +178,8 @@ pub fn parse_plugin(root: &Path) -> Result<Candidate> {
             service,
         },
         settings_defaults,
+        profile: PluginProfile::V5Luau,
+        v4_runtime: None,
     })
 }
 

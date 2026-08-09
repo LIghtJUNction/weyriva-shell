@@ -198,7 +198,7 @@ plan_file \
     /usr/bin/weyriva-luau-host \
     0755
 plan_file "$ROOT/config/niri/config.kdl" /usr/share/weyriva/config/niri/config.kdl
-for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/config/weyriva"; do
+for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/v4-host" "$ROOT/config/weyriva"; do
     while IFS= read -r -d '' source; do
         relative=${source#"$ROOT"/}
         plan_file "$source" "/usr/share/weyriva/$relative"

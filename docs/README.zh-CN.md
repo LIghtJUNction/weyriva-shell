@@ -16,8 +16,11 @@ greetd 只在内部负责 VT、PAM 认证和创建会话。它不是可见产品
 > Launcher Provider 切片已通过本地测试，包含固定版本官方 Kaomoji 证据，
 > Provider 分类也已传到 QML。XRY 有已批准的 UI iteration 3
 > Shell/Greeter 预览，并保留此前部署的控制面里程碑，但尚未部署本次全
-> Rust 切换。其他五种 Entry、API 4–19、v4 QML Host、完整 Surface、
-> 干净打包证据和完整 XRY 验收仍未完成。详见
+> Rust 切换。固定版本的 `noctalia-v4-qml/1` 首个切片
+>（`kaomoji-provider` 的 `main` + `launcherProvider`）也已实现，并在
+> 隔离的 Weyriva Quickshell Host 中通过本地运行测试；这不代表完整 v4
+> 兼容。其他五种 Entry、API 4–19、其余 v4 Entry、完整 Surface、干净打包
+> 证据和完整 XRY 验收仍未完成。详见
 > [兼容与验收表](NOCTALIA_PARITY.md)。
 
 插件产品名称是 **Weyriva Plugins**。`v5` 只属于上游兼容 profile 标识，
@@ -106,9 +109,11 @@ Mod+1/2/3       工作区
 代码，Launcher 只渲染验证后的结果。本地安装器与打包元数据已经使用这套
 Rust 控制面，但已安装机器和 XRY 行为仍需独立证据。
 
-当前兼容声明严格限定为：API 3、单一 Launcher Provider Entry，并已用自有
-Fixture 和固定版本的官方 Kaomoji 插件在本地验证，Provider 分类也已传到
-QML。它不代表其他五种 Noctalia Entry、API 4–19 或 v4 QML profile 已兼容。
+当前兼容声明严格限定为：API 3 的单一 Launcher Provider（可带一个 Service）
+切片，以及固定版本 v4 `kaomoji-provider` 的 `{main, launcherProvider}`
+切片；两者都只有本地 Fixture/运行时证据。Provider 分类已传到 QML，v4
+结果、激活、真实 Handler 别名和故障隔离也已在隔离 Host 中执行。这不代表
+其他五种 Noctalia Entry、API 4–19 或其余 v4 Entry 已兼容。
 
 Noctalia 只作为固定提交的公开行为与插件 ABI 参考。Weyriva 必须自行实现兼容
 行为；能列出 catalog 或解析 manifest 不等于插件兼容。

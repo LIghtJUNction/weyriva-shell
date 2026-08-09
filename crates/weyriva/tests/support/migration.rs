@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
 use weyriva::Paths;
 use weyriva::manifest::parse_plugin;
-use weyriva::model::{PluginRecord, Provenance, STATE_SCHEMA, StateDocument};
+use weyriva::model::{PluginProfile, PluginRecord, Provenance, STATE_SCHEMA, StateDocument};
 use weyriva::tree::validate_and_hash;
 
 pub struct MigrationFixture {
@@ -119,6 +119,8 @@ label_key = "Uppercase"
             digest: digest.clone(),
             version: candidate.provider.version.clone(),
             provider: candidate.provider,
+            profile: PluginProfile::default(),
+            v4_runtime: None,
             settings_defaults: candidate.settings_defaults,
             provenance: Provenance {
                 source: "fixture".to_owned(),

@@ -3,9 +3,9 @@
 All fixtures are authored by Weyriva. They exercise public observable behavior
 without copying upstream shell implementation or plugin source.
 
-Only `v5-launcher-api3` is currently passed locally. Every other fixture below
-is a planned acceptance case and remains not run unless its section later
-records a different status.
+The narrow `v5-launcher-api3` and pinned `v4-launcher-provider` fixtures are
+currently passed locally. Every other fixture below is a planned acceptance
+case and remains not run unless its section later records a different status.
 
 Each fixture records:
 
@@ -117,6 +117,14 @@ Verifies `DraggableDesktopWidget`, `widgetData`, scale/drag state,
 plugin-wide settings component.
 
 ### `v4-launcher-provider`
+
+Status: passed locally for the pinned `kaomoji-provider` shape.
+
+The fixture covers the exact `main` + `launcherProvider` manifest, real
+`handleCommand`/`getResults` flow over an object-shaped database, async
+`launcher.updateResults()` refresh, the documented `sh -c` clipboard command,
+the actual `plugin:kaomoji` IPC alias, and failure isolation. It does not cover
+the other v4 entry kinds or claim general QML compatibility.
 
 Verifies command prefix, `init`, open notification, query, categories, results,
 selection, and launcher open/close/toggle.

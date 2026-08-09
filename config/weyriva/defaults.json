@@ -7,7 +7,13 @@
     "accent": "#D97757"
   },
   "plugins": {
-    "v4": "planned",
+    "v4": {
+      "schema": 1,
+      "profile": "v4-qml",
+      "plugin": "kaomoji-provider",
+      "entry_points": ["main", "launcherProvider"],
+      "status": "implemented-local"
+    },
     "v5": {
       "schema": 1,
       "plugin_api": 3,

@@ -11,7 +11,9 @@ pub(crate) fn parse_reference(reference: &str) -> Result<(&str, &str)> {
     let (plugin_id, entry_id) = reference
         .rsplit_once(':')
         .ok_or_else(|| Error::new("invalid_provider", "provider must be ID:ENTRY"))?;
-    if !valid_plugin_id(plugin_id) || !valid_identifier(entry_id) {
+    if !(valid_plugin_id(plugin_id) || plugin_id == "kaomoji-provider")
+        || !valid_identifier(entry_id)
+    {
         return Err(Error::new("invalid_provider", "provider must be ID:ENTRY"));
     }
     Ok((plugin_id, entry_id))

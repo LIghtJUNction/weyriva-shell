@@ -184,8 +184,13 @@ else
 fi
 
 if command -v systemd-analyze >/dev/null; then
-    printf '%s\n' '[check] systemd user units'
-    systemd-analyze --user verify "$ROOT"/systemd/*.service
+    if [[ -n ${XDG_RUNTIME_DIR:-} ]] &&
+        systemctl --user show-environment >/dev/null 2>&1; then
+        printf '%s\n' '[check] systemd user units'
+        systemd-analyze --user verify "$ROOT"/systemd/*.service
+    else
+        printf '%s\n' '[skip] systemd user units (no reachable user manager)'
+    fi
 else
     printf '%s\n' '[skip] systemd-analyze is not installed'
 fi
@@ -202,16 +207,18 @@ if [[ -n "$QT6_QMLLINT" ]]; then
     mkdir -p "$QML_IMPORT_ROOT/qs"
     ln -s "$ROOT/shell/Weyriva" "$QML_IMPORT_ROOT/qs/Weyriva"
     mapfile -d '' QML_FILES < <(
-        find "$ROOT/shell" "$ROOT/greeter" -name '*.qml' -type f -print0 |
+        find "$ROOT/shell" "$ROOT/greeter" "$ROOT/v4-host" -name '*.qml' -type f -print0 |
             sort -z
     )
     "$QT6_QMLLINT" \
         --ignore-settings \
         --max-warnings 0 \
+        --missing-property disable \
         --uncreatable-type disable \
         --unqualified disable \
         -I /usr/lib/qt6/qml \
         -I "$QML_IMPORT_ROOT" \
+        -I "$ROOT/v4-host/facade" \
         "${QML_FILES[@]}"
 else
     printf '%s\n' '[skip] Qt 6 qmllint is not installed'

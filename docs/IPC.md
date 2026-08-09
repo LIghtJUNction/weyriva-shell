@@ -93,7 +93,8 @@ Plugin IPC depends on the compatibility profile:
 - `noctalia-v5-luau/1` entries receive `onIpc(event, payload)` through the
   Rust `weyriva-luau-host`;
 - v4 QML plugins register `IpcHandler` targets in the isolated compatibility
-  host once that planned lane exists.
+  host. The first pinned slice resolves the real `plugin:kaomoji` target and
+  exposes its launcher-toggle action; other v4 targets remain unimplemented.
 
 Python is test tooling only. It is not a documented production protocol,
 runtime, or plugin-authoring surface.

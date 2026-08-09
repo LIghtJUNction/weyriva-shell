@@ -1,0 +1,2 @@
+module Compat
+singleton Quickshell 1.0 Quickshell.qml

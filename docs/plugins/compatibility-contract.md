@@ -15,7 +15,7 @@ compatibility terminology and profile identifiers.
 | Profile | Package format | Execution environment | Status |
 |---|---|---|---|
 | `noctalia-v5-luau/1` | `plugin.toml` + `.luau` | Rust `weyriva-luau-host` with isolated trusted Luau VMs | API 3 single-launcher-provider slice passed locally and package-wired; target verification pending |
-| `noctalia-v4-qml/1` | `manifest.json` + QML | isolated Quickshell compatibility host | Planned |
+| `noctalia-v4-qml/1` | `manifest.json` + QML | isolated Quickshell compatibility host | Pinned `main` + `launcherProvider` slice implemented and locally tested |
 
 A host advertises an exact profile and supported API range. It must reject a
 package outside that range rather than running it partially.
@@ -67,7 +67,8 @@ Weyriva still isolates failure domains:
 
 - one bad entry must not freeze the core UI;
 - time and output are bounded where the public ABI permits;
-- v4 QML runs outside the core shell process;
+- v4 QML runs outside the core shell process; the first passing slice is the
+  pinned `kaomoji-provider` with exactly `main` and `launcherProvider`;
 - secrets are not included in logs or catalog metadata;
 - privileged operations are not granted implicitly.
 

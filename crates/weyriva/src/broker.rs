@@ -12,7 +12,9 @@ use serde_json::{Value as JsonValue, json};
 use crate::error::{Error, Result};
 use crate::host_session::ProcessControl;
 use crate::install::{self, remove_private_tree_if_exists};
-use crate::model::{PluginRecord, STATE_SCHEMA, StateDocument, StatusRecord, StatusResponse};
+use crate::model::{
+    PluginProfile, PluginRecord, STATE_SCHEMA, StateDocument, StatusRecord, StatusResponse,
+};
 use crate::paths::Paths;
 use crate::runtime::{RuntimeRegistry, StartMode, execute_result_actions};
 use crate::sources;
@@ -32,14 +34,44 @@ impl Broker {
     pub fn new(paths: Paths) -> Self {
         let host_executable = env::var_os("WEYRIVA_LUAU_HOST")
             .map_or_else(|| PathBuf::from("weyriva-luau-host"), PathBuf::from);
-        Self::with_host(paths, host_executable)
+        let quickshell = env::var_os("WEYRIVA_QUICKSHELL")
+            .map_or_else(|| PathBuf::from("quickshell"), PathBuf::from);
+        let v4_host = env::var_os("WEYRIVA_V4_HOST").map_or_else(
+            || {
+                let system_host = PathBuf::from("/usr/share/weyriva/v4-host");
+                if system_host.is_dir() {
+                    system_host
+                } else {
+                    paths.user_v4_host_dir()
+                }
+            },
+            PathBuf::from,
+        );
+        Self::with_hosts(paths, host_executable, quickshell, v4_host)
     }
 
     #[must_use]
     pub fn with_host(paths: Paths, host_executable: PathBuf) -> Self {
-        Self::with_host_and_state_writer(
+        Self::with_hosts(
             paths,
             host_executable,
+            PathBuf::from("quickshell"),
+            PathBuf::from("/usr/share/weyriva/v4-host"),
+        )
+    }
+
+    #[must_use]
+    pub fn with_hosts(
+        paths: Paths,
+        host_executable: PathBuf,
+        quickshell: PathBuf,
+        v4_host: PathBuf,
+    ) -> Self {
+        Self::with_hosts_and_state_writer(
+            paths,
+            host_executable,
+            quickshell,
+            v4_host,
             Box::<DurableStateWriter>::default(),
         )
     }
@@ -50,9 +82,27 @@ impl Broker {
         host_executable: PathBuf,
         state_writer: Box<dyn StateWriter>,
     ) -> Self {
+        Self::with_hosts_and_state_writer(
+            paths,
+            host_executable,
+            PathBuf::from("quickshell"),
+            PathBuf::from("/usr/share/weyriva/v4-host"),
+            state_writer,
+        )
+    }
+
+    #[must_use]
+    pub fn with_hosts_and_state_writer(
+        paths: Paths,
+        host_executable: PathBuf,
+        quickshell: PathBuf,
+        v4_host: PathBuf,
+        state_writer: Box<dyn StateWriter>,
+    ) -> Self {
+        let runtime_root = paths.runtime_dir.clone();
         Self {
             paths,
-            runtime: RuntimeRegistry::new(host_executable),
+            runtime: RuntimeRegistry::new(host_executable, quickshell, v4_host, runtime_root),
             state_writer,
         }
     }
@@ -64,9 +114,16 @@ impl Broker {
         state_writer: Box<dyn StateWriter>,
         process_control: Arc<dyn ProcessControl>,
     ) -> Self {
+        let runtime_root = paths.runtime_dir.clone();
         Self {
             paths,
-            runtime: RuntimeRegistry::with_process_control(host_executable, process_control),
+            runtime: RuntimeRegistry::with_process_control(
+                host_executable,
+                PathBuf::from("quickshell"),
+                PathBuf::from("/usr/share/weyriva/v4-host"),
+                runtime_root,
+                process_control,
+            ),
             state_writer,
         }
     }
@@ -85,6 +142,15 @@ impl Broker {
 
     pub fn install(&mut self, plugin_id: &str) -> Result<JsonValue> {
         install::install(&self.paths, plugin_id)?;
+        serde_json::to_value(self.status(Some(plugin_id))?).map_err(Into::into)
+    }
+
+    pub fn install_profiled(
+        &mut self,
+        plugin_id: &str,
+        profile: PluginProfile,
+    ) -> Result<JsonValue> {
+        install::install_profiled(&self.paths, plugin_id, profile)?;
         serde_json::to_value(self.status(Some(plugin_id))?).map_err(Into::into)
     }
 

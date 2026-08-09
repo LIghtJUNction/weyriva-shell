@@ -72,6 +72,11 @@ impl Paths {
     pub fn daemon_lock_file(&self) -> PathBuf {
         self.runtime_dir.join("daemon.lock")
     }
+
+    #[must_use]
+    pub fn user_v4_host_dir(&self) -> PathBuf {
+        self.data_dir.with_file_name("v4-host")
+    }
 }
 
 fn xdg_root(name: &str, home: Option<&Path>, fallback: &str) -> Result<PathBuf> {
