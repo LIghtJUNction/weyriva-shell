@@ -206,8 +206,12 @@ fi
 if command -v systemd-analyze >/dev/null; then
     if [[ -n ${XDG_RUNTIME_DIR:-} ]] &&
         systemctl --user show-environment >/dev/null 2>&1; then
-        printf '%s\n' '[check] systemd user units'
-        systemd-analyze --user verify "$ROOT"/systemd/*.service
+        if [[ -x /usr/bin/weyriva && -x /usr/bin/niri ]]; then
+            printf '%s\n' '[check] systemd user units'
+            systemd-analyze --user verify "$ROOT"/systemd/*.service
+        else
+            printf '%s\n' '[skip] systemd user units (runtime binaries are not installed)'
+        fi
     else
         printf '%s\n' '[skip] systemd user units (no reachable user manager)'
     fi
