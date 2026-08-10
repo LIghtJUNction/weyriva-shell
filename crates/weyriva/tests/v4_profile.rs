@@ -10,6 +10,22 @@ use weyriva::v4_manifest::parse_plugin;
 
 mod common;
 
+fn test_quickshell() -> Option<std::path::PathBuf> {
+    let executable = std::env::var_os("WEYRIVA_TEST_QUICKSHELL").map_or_else(
+        || std::path::PathBuf::from("/usr/bin/quickshell"),
+        std::path::PathBuf::from,
+    );
+    if executable.is_file() {
+        Some(executable)
+    } else {
+        eprintln!(
+            "skipping real Quickshell v4 integration: {} is unavailable; set WEYRIVA_TEST_QUICKSHELL to run it",
+            executable.display()
+        );
+        None
+    }
+}
+
 fn write_v4_plugin(root: &std::path::Path, entries: &serde_json::Value) -> std::path::PathBuf {
     let plugin = root.join("kaomoji-provider");
     fs::create_dir_all(&plugin).expect("fixture directory should be created");
@@ -252,6 +268,9 @@ printf '%s\n' '{"ok":true,"id":1,"result":{"ready":true},"error":null}'
 
 #[test]
 fn owned_v4_host_loads_fixture_and_normalizes_query_and_activation() {
+    let Some(quickshell) = test_quickshell() else {
+        return;
+    };
     let temporary = tempdir().expect("temporary directory should be created");
     let plugin = write_v4_plugin(
         temporary.path(),
@@ -264,7 +283,7 @@ fn owned_v4_host_loads_fixture_and_normalizes_query_and_activation() {
     let candidate = parse_plugin(&plugin).expect("self fixture should parse");
     let host_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../v4-host");
     let mut session = V4HostSession::start(
-        std::path::Path::new("/usr/bin/quickshell"),
+        &quickshell,
         &host_root,
         &temporary.path().join("runtime"),
         &candidate.provider.plugin_id,
@@ -293,6 +312,9 @@ fn owned_v4_host_loads_fixture_and_normalizes_query_and_activation() {
 
 #[test]
 fn broker_routes_v4_query_and_real_handler_alias_without_core_shell_coupling() {
+    let Some(quickshell) = test_quickshell() else {
+        return;
+    };
     let temporary = tempdir().expect("temporary directory should be created");
     let source = temporary.path().join("source");
     let plugin = write_v4_plugin(
@@ -349,7 +371,7 @@ Item {
     let mut broker = Broker::with_hosts(
         paths,
         temporary.path().join("unused-luau-host"),
-        std::path::PathBuf::from("/usr/bin/quickshell"),
+        quickshell,
         host_root,
     );
     broker
@@ -429,7 +451,7 @@ fn v4_load_failure_is_isolated_and_broker_remains_available() {
     assert!(
         matches!(
             error.code(),
-            "plugin_error" | "host_protocol" | "host_timeout" | "host_exited"
+            "plugin_error" | "host_protocol" | "host_timeout" | "host_exited" | "io_error"
         ),
         "unexpected isolated host error: {error}"
     );
