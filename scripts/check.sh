@@ -62,6 +62,14 @@ for relative in ("user-share/wayland-sessions/weyriva.desktop",):
         parser.read_file(stream)
 PY
 
+printf '%s\n' '[check] Release binaries for installer smoke tests'
+cargo build \
+    --manifest-path "$ROOT/Cargo.toml" \
+    --locked \
+    --release \
+    -p weyriva \
+    -p weyriva-luau-host
+
 printf '%s\n' '[check] Installer dry-run and isolated HOME behavior'
 INSTALL_HOME="$CHECK_TMP/home"
 mkdir -p "$INSTALL_HOME"

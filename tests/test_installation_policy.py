@@ -206,6 +206,17 @@ class InstallationPolicyTests(unittest.TestCase):
     def test_user_install_preserves_unmanaged_identical_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
+            binaries = (
+                ROOT / "target/release/weyriva",
+                ROOT / "target/release/weyriva-luau-host",
+            )
+            created_binaries = []
+            for binary in binaries:
+                if not binary.exists():
+                    binary.parent.mkdir(parents=True, exist_ok=True)
+                    binary.write_bytes(b"\x7fELF")
+                    binary.chmod(0o755)
+                    created_binaries.append(binary)
             destination = home / "config/weyriva/defaults.json"
             destination.parent.mkdir(parents=True)
             payload = (ROOT / "config/weyriva/defaults.json").read_bytes()
@@ -217,16 +228,20 @@ class InstallationPolicyTests(unittest.TestCase):
                 "XDG_DATA_HOME": str(home / "data"),
                 "XDG_STATE_HOME": str(home / "state"),
             }
-            subprocess.run(
-                [str(ROOT / "scripts/install.sh"), "--apply"],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            manifest = home / "state/weyriva/installed-files.tsv"
-            self.assertNotIn(str(destination), manifest.read_text())
-            self.assertEqual(
-                hashlib.sha256(destination.read_bytes()).digest(),
-                hashlib.sha256(payload).digest(),
-            )
+            try:
+                subprocess.run(
+                    [str(ROOT / "scripts/install.sh"), "--apply"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                manifest = home / "state/weyriva/installed-files.tsv"
+                self.assertNotIn(str(destination), manifest.read_text())
+                self.assertEqual(
+                    hashlib.sha256(destination.read_bytes()).digest(),
+                    hashlib.sha256(payload).digest(),
+                )
+            finally:
+                for binary in created_binaries:
+                    binary.unlink(missing_ok=True)
