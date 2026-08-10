@@ -47,7 +47,9 @@ class VisualInteractionContractTests(unittest.TestCase):
 
         self.assertIn("TopBar {", shell)
         self.assertIn("LockSurface {", shell)
-        self.assertIn("border.width: 1", top_bar)
+        self.assertGreaterEqual(top_bar.count("ContinuousSurface {"), 6)
+        self.assertIn("cornerRadius: 27", top_bar)
+        self.assertNotIn("border.width:", top_bar)
         self.assertNotRegex(self.qml, r"border\.width:\s*[3-9]")
         self.assertNotIn("AnthropicCarrier", panel)
         self.assertNotIn("Canvas {", panel)
@@ -75,9 +77,11 @@ class VisualInteractionContractTests(unittest.TestCase):
         top_bar = (ROOT / "shell/Weyriva/TopBar.qml").read_text()
 
         self.assertIn("property var routeScreen: null", state)
+        self.assertIn('property string routeScreenName: ""', state)
         self.assertIn('property string presentationRoute: ""', state)
         self.assertIn("function openRoute(nextRoute, sourceScreen)", state)
         self.assertIn("routeScreen = sourceScreen", state)
+        self.assertIn('routeScreenName = sourceScreen.name || ""', state)
         open_body = state.split("function openRoute(", 1)[1].split("}", 1)[0]
         self.assertLess(
             open_body.index("presentationRoute = nextRoute"),
@@ -87,21 +91,30 @@ class VisualInteractionContractTests(unittest.TestCase):
         close_body = state.split("function closeRoute()", 1)[1].split("}", 1)[0]
         self.assertIn('route = ""', close_body)
         self.assertIn("routeScreen = null", close_body)
+        self.assertIn('routeScreenName = ""', close_body)
         self.assertNotIn("presentationRoute =", close_body)
 
         self.assertIn("required property var sourceScreen", top_bar)
-        self.assertGreaterEqual(
-            top_bar.count("ShellState.routeScreen === root.sourceScreen"),
-            6,
-        )
-        self.assertGreaterEqual(top_bar.count("root.sourceScreen"), 12)
+        self.assertIn("function routeIs(name)", top_bar)
         self.assertEqual(
-            shell.count("&& ShellState.routeScreen === modelData"),
+            top_bar.count("ShellState.routeScreenName === root.sourceScreen.name"),
+            1,
+        )
+        self.assertGreaterEqual(top_bar.count('root.routeIs("'), 8)
+        self.assertGreaterEqual(top_bar.count("root.sourceScreen"), 9)
+        self.assertEqual(
+            shell.count("&& ShellState.routeScreenName === modelData.name"),
             2,
             "only the owning utility/centered host may become active",
         )
         self.assertIn("focusable: active", shell)
         self.assertIn("WlrKeyboardFocus.OnDemand", shell)
+        self.assertEqual(
+            shell.count("WlrLayershell.layer: WlrLayer.Overlay"),
+            2,
+            "utility and centered route hosts must stay above normal windows",
+        )
+        self.assertIn("WlrLayershell.layer: WlrLayer.Top", shell)
         self.assertIn(
             "return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null",
             shell,
@@ -240,7 +253,9 @@ class VisualInteractionContractTests(unittest.TestCase):
             self.assertIn(f'"{route}"', utility)
         self.assertIn("anchors.top: parent.top", utility)
         self.assertIn("x: utilityHost.routeX", utility)
-        for route in ("launcher", "wallpaper", "settings"):
+        for route in ("launcher", "tasks", "wallpaper", "settings"):
+            self.assertIn(f'"{route}"', centered)
+        for route in ("overview", "clipboard", "session"):
             self.assertIn(f'"{route}"', centered)
         self.assertIn("anchors.centerIn: parent", centered)
 
@@ -249,15 +264,19 @@ class VisualInteractionContractTests(unittest.TestCase):
         panel = (component_root / "SurfacePanel.qml").read_text()
         route_components = (
             "LauncherSurface",
+            "AiTaskSurface",
+            "OverviewSurface",
+            "ClipboardSurface",
             "ControlCenterSurface",
             "CalendarSurface",
             "NotificationsSurface",
             "WallpaperSurface",
             "SettingsSurface",
+            "SessionSurface",
         )
-        self.assertLessEqual(len((ROOT / "shell/shell.qml").read_text().splitlines()), 260)
+        self.assertLessEqual(len((ROOT / "shell/shell.qml").read_text().splitlines()), 300)
         self.assertLessEqual(len((ROOT / "greeter/shell.qml").read_text().splitlines()), 260)
-        self.assertLessEqual(len(panel.splitlines()), 180)
+        self.assertLessEqual(len(panel.splitlines()), 200)
         for component in route_components:
             with self.subTest(component=component):
                 path = component_root / f"{component}.qml"
@@ -277,3 +296,37 @@ class VisualInteractionContractTests(unittest.TestCase):
                 f"{component} 1.0 {component}.qml",
                 (component_root / "qmldir").read_text(),
             )
+
+    def test_continuous_geometry_and_coastal_art_replace_rejected_shapes(self) -> None:
+        component_root = ROOT / "shell/Weyriva"
+        continuous = (component_root / "ContinuousSurface.qml").read_text()
+        button = (component_root / "ActionButton.qml").read_text()
+        panel = (component_root / "SurfacePanel.qml").read_text()
+        task_navigation = (component_root / "TaskNavigation.qml").read_text()
+        task_inspector = (component_root / "TaskInspector.qml").read_text()
+        task_workspace = (component_root / "TaskWorkspace.qml").read_text()
+        self.assertIn("import QtQuick.Shapes", continuous)
+        self.assertIn("property real cornerPower: 4.2", continuous)
+        self.assertIn("Math.pow(Math.sin(angle), exponent)", continuous)
+        self.assertIn("preferredRendererType: Shape.CurveRenderer", continuous)
+        self.assertIn("down && !ShellState.reducedMotion", button)
+        self.assertIn("damping: 0.9", button)
+        self.assertIn("transformOrigin: sourceOrigin", panel)
+        self.assertIn("enabled: !ShellState.reducedMotion", panel)
+        self.assertIn("cornerRadius: 20", task_navigation)
+        self.assertIn("cornerRadius: 20", task_inspector)
+        self.assertIn(
+            "cornerRadius: prompt.activeFocus ? 25 : 24",
+            task_workspace,
+        )
+
+        wallpaper_root = ROOT / "assets/wallpapers"
+        for name in ("weyriva-coast.svg", "weyriva-coast-night.svg"):
+            with self.subTest(name=name):
+                source = (wallpaper_root / name).read_text()
+                for color in ("#BCD1CA", "#FAF9F5", "#141413", "#D97757"):
+                    self.assertIn(color, source)
+                self.assertNotIn("Gradient", source)
+                self.assertNotIn("opacity=", source)
+        self.assertFalse((wallpaper_root / "weyriva-threshold.svg").exists())
+        self.assertFalse((wallpaper_root / "weyriva-threshold-night.svg").exists())

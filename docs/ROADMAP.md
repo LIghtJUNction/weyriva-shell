@@ -128,3 +128,41 @@ Exit: all required XRY evidence is attached and the Reviewer approves.
 
 See [Testing](TESTING.md) and
 [the compatibility ledger](NOCTALIA_PARITY.md).
+
+## Editorial workspace slice
+
+Implemented in the repository and covered by local source/behavior checks:
+
+- [x] flat Anthropic-style coastal wallpaper, packaged as the default
+  light background;
+- [x] flat editorial greeter refresh with exact sea-glass, ivory, ink, and clay
+  roles and no runtime gradients;
+- [x] dynamic Niri workspace rail with the complete runtime list and an
+  explicit unavailable state;
+- [x] Niri window overview with keyboard navigation and observable focus
+  failure;
+- [x] searchable `cliphist` surface with validated daemon copy and confirmed
+  wipe;
+- [x] session surface with immediate lock and confirmation for destructive
+  actions;
+- [x] volume/brightness command handling and non-intercepting readback OSD;
+- [x] atomic persistence for wallpaper, light/dark mode, reduced motion, DND,
+  and bar visibility;
+- [x] portable wallpaper packaging for source, user, system, and AUR layouts.
+- [x] CortexFS task route with runtime agent discovery, durable sessions,
+  streaming output, explicit approvals, history loading, and cancellation;
+
+Still requiring environment-specific acceptance:
+
+- [ ] render and exercise all new surfaces in a real Niri/Wayland session;
+- [ ] restart the shell and confirm persisted preferences visually;
+- [ ] verify audio and brightness readback against target hardware;
+- [ ] exercise greetd authentication and secure lock recovery;
+- [ ] attach current XRY screenshots and interaction evidence.
+- [ ] exercise one provider-backed AI send against the installed CortexFS
+  configuration without using a test model. A 2026-08-10 Wayland run reached
+  the real `coder` socket and correctly surfaced its `EIO CannotRunAgent`
+  failure. The installed agent advertised `cwd=/workspace` while
+  `workspace=-` and exposed no `/workspace` mount; successful provider
+  completion remains outstanding until that CortexFS runtime configuration is
+  repaired.

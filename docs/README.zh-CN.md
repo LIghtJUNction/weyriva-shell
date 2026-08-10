@@ -32,7 +32,7 @@ greetd 只在内部负责 VT、PAM 认证和创建会话。它不是可见产品
 Weyriva 的确定目标包括：
 
 - 登录、桌面、认证锁屏、休眠、注销和故障恢复；
-- Bar、托盘、Launcher、日历、控制中心、通知、剪贴板、壁纸、OSD、设置、
+- Bar、托盘、Launcher、CortexFS AI 任务、日历、控制中心、通知、剪贴板、壁纸、OSD、设置、
   截图和桌面组件；
 - Weyriva 原生控制协议与版本化插件兼容层；
 - 无安装问卷、无个性化选择的固定默认配置。
@@ -81,10 +81,16 @@ Debian/Ubuntu 和 openSUSE 尽量支持。需要其他策略的用户应自行 F
 发行版的实测仍是生产就绪前置条件。安装器不会重启 greetd 或原本未运行的
 用户服务。
 
+Arch 与 AUR 路径会安装 `cliphist`、`brightnessctl`、`playerctl` 和
+`wireplumber`，供剪贴板、OSD 与媒体键使用。尽力支持的非 Arch 路径若缺少
+对应命令，界面会明确显示不可用或错误状态。
+
 ## 目标快捷键
 
 ```text
 Mod+Space       Launcher
+Mod+A           AI 任务启动器
+Mod+Tab         窗口总览
 Mod+Return      终端
 Mod+V           剪贴板历史
 Mod+C           控制中心
@@ -100,6 +106,18 @@ Mod+1/2/3       工作区
 
 这些是产品交互合同，不是“按钮已可用”的声明。每个 Surface 都必须通过
 鼠标、键盘、焦点和可见状态验收。
+
+## CortexFS AI 任务
+
+AI 任务启动器直接使用 CortexFS 原生 Unix Socket JSONL 会话 ABI。每次手动
+刷新都会读取完整的 `ctx agent ps` 运行时树；Weyriva 不预设 agent 名称，也不
+限制 agent 数量。选中 agent 后会读取它当前的模型、工作目录与工具清单，并在
+私有持久会话中流式显示输出，提供单次允许/拒绝工具审批、取消、索引历史重载，
+以及转交 `ctx agent chat` 或 `attach` 的入口。Prompt 只写入
+Socket，不进入进程参数。
+
+普通 Launcher 中输入 `?` 加任务即可转入 AI 任务 Surface。CortexFS 或 `ctx`
+不可用时，界面会明确显示离线，不会伪造兜底 agent。
 
 ## Weyriva Plugins
 

@@ -147,6 +147,7 @@ fn no_param_builtins_reject_every_nonempty_shape() {
         "weyriva.methods",
         "weyriva.niri.outputs",
         "weyriva.niri.windows",
+        "weyriva.niri.workspaces",
         "weyriva.launcher.open",
         "weyriva.notifications.dismiss_all",
         "weyriva.panel.toggle",
@@ -189,25 +190,49 @@ fn dnd_accepts_only_empty_or_exact_boolean() {
 }
 
 #[test]
+fn clipboard_copy_rejects_invalid_shapes_and_ids_before_process_start() {
+    for invalid in [
+        JsonValue::Null,
+        json!({}),
+        json!({"id": 1}),
+        json!({"id": "abc"}),
+        json!({"id": "1", "extra": true}),
+    ] {
+        let mut harness = Harness::new();
+        let response = harness.request("weyriva.clipboard.copy", &invalid);
+        assert_eq!(response["error"]["code"], "invalid_params");
+        assert!(harness.process.commands().is_empty());
+    }
+}
+
+#[test]
 fn niri_and_shell_builtins_use_fixed_argv() {
     let mut harness = Harness::new();
     harness.process.push(0, "{}\n", "");
+    harness.process.push(0, "[]\n", "");
     harness.process.push(0, "opened\n", "");
 
     let outputs = harness.request("weyriva.niri.outputs", &json!({}));
+    let workspaces = harness.request("weyriva.niri.workspaces", &json!({}));
     let launcher = harness.request("weyriva.launcher.open", &json!({}));
     let commands = harness.process.commands();
 
     assert_eq!(outputs["result"], json!({}));
+    assert_eq!(workspaces["result"], json!([]));
     assert_eq!(launcher["result"]["command"], "route");
     assert_eq!(commands[0].program, OsStr::new("niri"));
     assert_eq!(
         commands[0].arguments,
         ["msg", "-j", "outputs"].map(OsString::from).to_vec()
     );
-    assert_eq!(commands[1].program, OsStr::new("quickshell"));
+    assert_eq!(commands[1].program, OsStr::new("niri"));
     assert_eq!(
-        commands[1].arguments[2..],
+        commands[1].arguments,
+        ["msg", "-j", "workspaces"].map(OsString::from).to_vec()
+    );
+    assert_eq!(commands[2].program, OsStr::new("quickshell"));
+    assert_eq!(
+        commands[2].arguments[2..],
         ["ipc", "call", "weyriva", "route", "launcher"].map(OsString::from)
     );
 }

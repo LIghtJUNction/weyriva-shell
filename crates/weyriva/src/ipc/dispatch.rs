@@ -2,6 +2,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value as JsonValue, json};
 
+use crate::actions;
 use crate::broker::Broker;
 use crate::error::{Error, Result};
 use crate::model::PluginProfile;
@@ -16,6 +17,8 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "weyriva.methods",
     "weyriva.niri.outputs",
     "weyriva.niri.windows",
+    "weyriva.niri.workspaces",
+    "weyriva.clipboard.copy",
     "weyriva.launcher.open",
     "weyriva.notifications.dismiss_all",
     "weyriva.notifications.dnd",
@@ -83,6 +86,16 @@ impl<'a> Dispatcher<'a> {
             "weyriva.niri.windows" => {
                 no_params(params, "niri.windows")?;
                 self.niri.json("windows")
+            }
+            "weyriva.niri.workspaces" => {
+                no_params(params, "niri.workspaces")?;
+                self.niri.json("workspaces")
+            }
+            "weyriva.clipboard.copy" => {
+                let object = object(params)?;
+                validate_keys(object, &["id"], &[])?;
+                actions::copy_clipboard_entry(string(object, "id")?)?;
+                Ok(json!({"copied": true}))
             }
             "weyriva.launcher.open" => {
                 no_params(params, "launcher.open")?;

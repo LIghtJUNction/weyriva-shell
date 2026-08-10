@@ -68,8 +68,9 @@ class UpdatePolicyTests(unittest.TestCase):
             "usr/share/weyriva/greeter/shell.qml",
             "usr/share/weyriva/config/weyriva/defaults.json",
             "usr/share/weyriva/greetd/config.toml",
-            "usr/share/weyriva/wallpapers/light/weyriva-cactus.png",
-            "usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png",
+            "usr/share/weyriva/assets/wallpapers/weyriva-coast.svg",
+            "usr/share/weyriva/assets/wallpapers/weyriva-coral.svg",
+            "usr/share/weyriva/assets/wallpapers/weyriva-coast-night.svg",
         )
         for relative in installed_paths:
             with self.subTest(relative=relative):

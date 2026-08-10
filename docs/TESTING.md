@@ -60,7 +60,7 @@ optional tool is “not run,” not “passed.”
 Tests assert behavior-bearing structure rather than exact pixels, arbitrary
 component filenames, or whitespace. They should prove:
 
-- the brand palette contains cactus `#BCD1CA`, ivory `#FAF9F5`, and ink
+- the brand palette contains sea glass `#BCD1CA`, ivory `#FAF9F5`, and ink
   `#141413`;
 - QML contains no `Gradient` and no Noctalia runtime/config delegation;
 - launcher uses a centered command-palette family;
@@ -72,6 +72,8 @@ component filenames, or whitespace. They should prove:
 - every enabled control maps to a state change, executable action, dismissal,
   navigation action, or lock request;
 - launcher filtering and desktop-entry execution remain wired;
+- the AI task launcher discovers its complete agent model at runtime and uses
+  the native CortexFS JSONL socket ABI without placing prompts in process args;
 - provider category metadata reaches QML, filters results, and resets
   deterministically when the provider changes;
 - control center has compact rows of real controls;
@@ -104,6 +106,24 @@ recovery.
 
 For route transitions, also test source origin, symmetric exit, mid-animation
 interruption, final state, and reduced-motion equivalence.
+
+### 2026-08-10 task-workspace runtime evidence
+
+A cold Quickshell run on the live three-output Wayland session exercised the
+task route on its owning `eDP-2` output. The centered continuous-corner surface
+remained above ordinary client windows after keyboard focus moved away, while
+`DP-1` and `HDMI-A-1` retained only their desktop and bar surfaces. Runtime
+discovery rendered all four agents returned by the installed CortexFS tree,
+166 indexed `coder` sessions, the selected session history, and all 11 exposed
+tools; these values were observed data, not UI presets.
+
+A real pointer/keyboard submission then wrote a bounded JSONL `send` frame to
+the installed `coder` socket. The installed CortexFS runtime returned
+`EIO CannotRunAgent`; the task inspector preserved that runtime error instead
+of misreporting a connection failure. A direct `ctx send` reproduced the same
+failure: this agent advertises `cwd=/workspace` with `workspace=-`, and its
+runtime root has no `/workspace` mount. This proves the UI-to-socket boundary
+and failure path, but it is not successful provider-backed completion evidence.
 
 ## Accessibility matrix
 

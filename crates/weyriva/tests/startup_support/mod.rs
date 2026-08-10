@@ -63,10 +63,17 @@ impl Fixture {
         );
         write(&layout.packaged_shell.join("shell.qml"), "shell\n");
         write(&layout.packaged_greeter.join("shell.qml"), "greeter\n");
-        for wallpaper in ["light/weyriva-cactus.png", "dark/weyriva-cactus-dark.png"] {
+        for wallpaper in [
+            "weyriva-coast.svg",
+            "weyriva-coral.svg",
+            "weyriva-coast-night.svg",
+        ] {
             write(
-                &layout.packaged_data.join("wallpapers").join(wallpaper),
-                "png\n",
+                &layout
+                    .packaged_data
+                    .join("assets/wallpapers")
+                    .join(wallpaper),
+                "svg\n",
             );
         }
         for unit in [

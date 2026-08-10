@@ -109,3 +109,11 @@ reduced-motion runs, and real greeter/lock attempts.
 
 Record source, runtime, system, and XRY evidence separately. Source review alone
 does not establish accessibility support.
+
+## Added workspace surfaces
+
+Overview and clipboard lists support arrow-key selection, Enter activation,
+Escape dismissal, and visible focus. Clipboard search exposes `/` as a focus
+shortcut. Session power actions require a second activation, and DND uses text
+and glyph state in addition to color. The OSD and toast hosts use an empty input
+mask and never steal keyboard or pointer input.

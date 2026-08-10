@@ -206,11 +206,14 @@ for source_root in "$ROOT/shell" "$ROOT/greeter" "$ROOT/v4-host" "$ROOT/config/w
 done
 plan_file "$ROOT/config/greetd/config.toml" /usr/share/weyriva/greetd/config.toml
 plan_file \
-    "$ROOT/assets/wallpapers/weyriva-cactus.png" \
-    /usr/share/weyriva/wallpapers/light/weyriva-cactus.png
+    "$ROOT/assets/wallpapers/weyriva-coast.svg" \
+    /usr/share/weyriva/assets/wallpapers/weyriva-coast.svg
 plan_file \
-    "$ROOT/assets/wallpapers/weyriva-cactus-dark.png" \
-    /usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png
+    "$ROOT/assets/wallpapers/weyriva-coral.svg" \
+    /usr/share/weyriva/assets/wallpapers/weyriva-coral.svg
+plan_file \
+    "$ROOT/assets/wallpapers/weyriva-coast-night.svg" \
+    /usr/share/weyriva/assets/wallpapers/weyriva-coast-night.svg
 plan_file \
     "$ROOT/user-share/wayland-sessions/weyriva.desktop" \
     /usr/share/wayland-sessions/weyriva.desktop

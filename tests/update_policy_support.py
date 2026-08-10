@@ -11,8 +11,9 @@ from weyriva_test_support import ROOT
 SHARE_FILES = (
     "config/niri/config.kdl",
     "greetd/config.toml",
-    "wallpapers/light/weyriva-cactus.png",
-    "wallpapers/dark/weyriva-cactus-dark.png",
+    "assets/wallpapers/weyriva-coast.svg",
+    "assets/wallpapers/weyriva-coral.svg",
+    "assets/wallpapers/weyriva-coast-night.svg",
     "shell/shell.qml",
     "shell/Weyriva/Panel.qml",
     "greeter/shell.qml",
@@ -43,8 +44,9 @@ def make_update_harness(temporary: Path) -> tuple[Path, Path, Path, dict[str, st
     source_files = (
         "config/niri/config.kdl",
         "config/greetd/config.toml",
-        "assets/wallpapers/weyriva-cactus.png",
-        "assets/wallpapers/weyriva-cactus-dark.png",
+        "assets/wallpapers/weyriva-coast.svg",
+        "assets/wallpapers/weyriva-coral.svg",
+        "assets/wallpapers/weyriva-coast-night.svg",
         "user-share/wayland-sessions/weyriva.desktop",
         "shell/shell.qml",
         "shell/Weyriva/Panel.qml",

@@ -92,7 +92,19 @@ cmp -s "$ROOT/config/weyriva/defaults.json" "$UNOWNED_HOME/config/weyriva/defaul
 
 printf '%s\n' '[check] Managed update and uninstall behavior'
 PROJECT_COPY="$CHECK_TMP/project"
-cp -a "$ROOT" "$PROJECT_COPY"
+mkdir -p "$PROJECT_COPY"
+while IFS= read -r -d '' entry; do
+    case ${entry##*/} in
+        .git | target) continue ;;
+    esac
+    cp -a -- "$entry" "$PROJECT_COPY/"
+done < <(find "$ROOT" -mindepth 1 -maxdepth 1 -print0)
+mkdir -p "$PROJECT_COPY/target/release"
+for executable in weyriva weyriva-luau-host; do
+    cp -a -- \
+        "$ROOT/target/release/$executable" \
+        "$PROJECT_COPY/target/release/$executable"
+done
 MANAGED_HOME="$CHECK_TMP/managed-home"
 mkdir -p "$MANAGED_HOME"
 MANAGED_ENV=(env HOME="$MANAGED_HOME" XDG_CONFIG_HOME="$MANAGED_HOME/config" XDG_DATA_HOME="$MANAGED_HOME/data" XDG_STATE_HOME="$MANAGED_HOME/state")

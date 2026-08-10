@@ -42,15 +42,20 @@ class IndependentShellTests(unittest.TestCase):
         surfaces = "\n".join(qml_sources().values())
         for route in (
             "launcher",
+            "tasks",
+            "overview",
+            "clipboard",
             "control-center",
             "calendar",
             "notifications",
             "wallpaper",
             "settings",
+            "session",
         ):
             self.assertIn(f'"{route}"', shell + surfaces)
         for function in (
             "route",
+            "osd",
             "lock",
             "clearNotifications",
             "toggleDnd",
@@ -76,6 +81,72 @@ class IndependentShellTests(unittest.TestCase):
         self.assertIn("sessionLock.locked = true", shell)
         self.assertIn("WlrKeyboardFocus.OnDemand", shell)
 
+    def test_persisted_preferences_and_bounded_system_surfaces_are_wired(self) -> None:
+        shell = (ROOT / "shell/shell.qml").read_text()
+        state = (ROOT / "shell/Weyriva/ShellState.qml").read_text()
+        overview = (ROOT / "shell/Weyriva/OverviewSurface.qml").read_text()
+        clipboard = (ROOT / "shell/Weyriva/ClipboardSurface.qml").read_text()
+        session = (ROOT / "shell/Weyriva/SessionSurface.qml").read_text()
+        osd = (ROOT / "shell/Weyriva/OsdController.qml").read_text()
+
+        self.assertIn('Quickshell.statePath("preferences.json")', state)
+        self.assertIn('Quickshell.shellPath(', state)
+        self.assertNotIn("Qt.resolvedUrl", state)
+        self.assertIn("atomicWrites: true", state)
+        self.assertIn("JSON.stringify", state)
+        self.assertIn('"weyriva.niri.windows"', overview)
+        self.assertIn('"focus-window", "--id"', overview)
+        self.assertIn('"cliphist", "list"', clipboard)
+        self.assertIn('"weyriva.clipboard.copy"', clipboard)
+        self.assertIn('"cliphist", "wipe"', clipboard)
+        self.assertIn('case "poweroff"', session)
+        self.assertIn('"wpctl", "set-volume"', osd)
+        self.assertIn('"brightnessctl", "set"', osd)
+        self.assertIn("osdController.adjust(kind, direction)", shell)
+
+    def test_launcher_bridge_uses_qt_javascript_compatible_whitespace_trim(self) -> None:
+        bridge = (ROOT / "shell/Weyriva/PluginLauncherBridge.qml").read_text()
+        self.assertNotIn("trimStart", bridge)
+        self.assertIn('replace(/^\\s+/, "")', bridge)
+
+    def test_cortexfs_agent_discovery_has_no_preset_agent_or_count(self) -> None:
+        bridge = (ROOT / "shell/Weyriva/CortexBridge.qml").read_text()
+        surface = (ROOT / "shell/Weyriva/AiTaskSurface.qml").read_text()
+        navigation = (ROOT / "shell/Weyriva/TaskNavigation.qml").read_text()
+        self.assertIn('["ctx", "agent", "ps"]', bridge)
+        self.assertIn("model: root.bridge.agents", navigation)
+        for preset in ("architect", "coder", "reviewer", "worker"):
+            self.assertNotIn(f'"{preset}"', bridge + surface + navigation)
+        self.assertNotRegex(
+            bridge + surface + navigation,
+            r"\bagents\.(?:slice|splice)\(0,\s*4\)",
+        )
+        self.assertIn('"ctx", "ping", "agent/" + probeTarget', bridge)
+        self.assertIn("depth: Math.floor(match[1].length / 3)", bridge)
+
+    def test_cortexfs_native_task_abi_is_wired_without_prompt_argv(self) -> None:
+        bridge = (ROOT / "shell/Weyriva/CortexBridge.qml").read_text()
+        launcher = (ROOT / "shell/Weyriva/LauncherSurface.qml").read_text()
+        self.assertIn("Socket {", bridge)
+        self.assertIn("SplitParser {", bridge)
+        self.assertIn('op: "send"', bridge)
+        self.assertIn('scope: "private"', bridge)
+        self.assertIn('op: "approve"', bridge)
+        self.assertIn('decision === "allow_once"', bridge)
+        self.assertIn('["uuidgen", "--random"]', bridge)
+        self.assertIn('sessionIndexPath("list")', bridge)
+        self.assertIn('sessionIndexPath("current")', bridge)
+        self.assertIn('"ctx", "agent", "history", selectedAgent', bridge)
+        self.assertIn('"ctx", "agent", "cancel", runAgent', bridge)
+        self.assertIn("validApprovalArgs(value.args)", bridge)
+        self.assertIn("eventRun !== runId", bridge)
+        self.assertIn("socketFailureTimer.restart()", bridge)
+        self.assertIn('"CortexFS runtime · " + value.code', bridge)
+        self.assertIn("root.error", bridge.split("id: socketFailureTimer", 1)[1])
+        self.assertNotIn("pendingPrompt]", bridge)
+        self.assertIn('startsWith("?")', launcher)
+        self.assertIn("ShellState.openTaskDraft", launcher)
+
     def test_bar_and_calendar_clocks_share_the_live_clock(self) -> None:
         shell = (ROOT / "shell/shell.qml").read_text()
         surfaces = "\n".join(qml_sources().values())
@@ -83,10 +154,8 @@ class IndependentShellTests(unittest.TestCase):
         self.assertIn("property date now: new Date()", state)
         self.assertIn("interval: 1000", shell)
         self.assertIn("onTriggered: ShellState.now = new Date()", shell)
-        self.assertIn(
-            'Qt.formatDateTime(ShellState.now, "ddd  MMM d  hh:mm")',
-            shell + surfaces,
-        )
+        self.assertIn("Qt.formatDateTime(", shell + surfaces)
+        self.assertIn('ShellState.now, "ddd  MMM d  hh:mm"', shell + surfaces)
         self.assertIn("property date calendarMonth: new Date(", surfaces)
         self.assertIn("ShellState.now.getFullYear()", surfaces)
         self.assertIn("ShellState.now.getMonth()", surfaces)
@@ -123,12 +192,17 @@ class IndependentShellTests(unittest.TestCase):
             "ActionButton.qml",
             "CalendarSurface.qml",
             "ControlCenterSurface.qml",
+            "ContinuousSurface.qml",
             "LauncherSurface.qml",
             "LockSurface.qml",
             "NotificationsSurface.qml",
             "SettingsSurface.qml",
             "SurfaceHeader.qml",
             "SurfacePanel.qml",
+            "TaskInspector.qml",
+            "TaskMessage.qml",
+            "TaskNavigation.qml",
+            "TaskWorkspace.qml",
             "TopBar.qml",
             "UtilityRow.qml",
             "WallpaperPreview.qml",
@@ -140,7 +214,7 @@ class IndependentShellTests(unittest.TestCase):
         )
         self.assertNotRegex(
             functional,
-            r"Theme\.(?:ink|ivory|paper|cactus|carrier)\b",
+            r"Theme\.(?:ink|ivory|paper|carrier)\b",
         )
         for consumer in (
             "color: Theme.surface",

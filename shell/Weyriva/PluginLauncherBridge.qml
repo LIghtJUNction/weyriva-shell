@@ -17,7 +17,8 @@ Item {
     readonly property string providerQuery: {
         if (!activeProvider)
             return ""
-        return input.trim().slice(activeProvider.prefix.length).trimStart()
+        return String(input).trim().slice(activeProvider.prefix.length)
+            .replace(/^\s+/, "")
     }
 
     signal queryReplacementRequested(string providerPrefix, string query)
@@ -27,7 +28,7 @@ Item {
     visible: false
 
     function providerForInput(value) {
-        const trimmed = value.trimStart()
+        const trimmed = String(value || "").replace(/^\s+/, "")
         for (let index = 0; index < providers.length; ++index) {
             const prefix = providers[index].prefix
             if (trimmed === prefix || trimmed.startsWith(prefix + " "))

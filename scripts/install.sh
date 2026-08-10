@@ -24,11 +24,14 @@ install_tree "$WEYRIVA_ROOT/config/weyriva" "$CONFIG_HOME/weyriva"
 install_tree "$WEYRIVA_ROOT/shell" "$DATA_HOME/weyriva/shell"
 install_tree "$WEYRIVA_ROOT/v4-host" "$DATA_HOME/weyriva/v4-host"
 install_file \
-    "$WEYRIVA_ROOT/assets/wallpapers/weyriva-cactus.png" \
-    "$DATA_HOME/weyriva/wallpapers/light/weyriva-cactus.png"
+    "$WEYRIVA_ROOT/assets/wallpapers/weyriva-coast.svg" \
+    "$DATA_HOME/weyriva/assets/wallpapers/weyriva-coast.svg"
 install_file \
-    "$WEYRIVA_ROOT/assets/wallpapers/weyriva-cactus-dark.png" \
-    "$DATA_HOME/weyriva/wallpapers/dark/weyriva-cactus-dark.png"
+    "$WEYRIVA_ROOT/assets/wallpapers/weyriva-coral.svg" \
+    "$DATA_HOME/weyriva/assets/wallpapers/weyriva-coral.svg"
+install_file \
+    "$WEYRIVA_ROOT/assets/wallpapers/weyriva-coast-night.svg" \
+    "$DATA_HOME/weyriva/assets/wallpapers/weyriva-coast-night.svg"
 remove_obsolete_managed
 write_state
 

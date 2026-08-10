@@ -29,6 +29,7 @@ fn complete_command_matrix_parses() {
         &["shell", "run", "--help"],
         &["shell", "reconcile-lock", "--help"],
         &["shell", "route", "launcher", "--help"],
+        &["shell", "osd", "volume", "up", "--help"],
         &["shell", "lock", "--help"],
         &["session", "start", "--help"],
         &["plugin", "source", "list", "--help"],
@@ -68,11 +69,15 @@ fn complete_command_matrix_parses() {
 fn route_names_are_exact() {
     for route in [
         "launcher",
+        "tasks",
+        "overview",
+        "clipboard",
         "control-center",
         "calendar",
         "notifications",
         "wallpaper",
         "settings",
+        "session",
     ] {
         let output = run(&["shell", "route", route, "--help"]);
         assert_eq!(output.status.code(), Some(0), "{route}");

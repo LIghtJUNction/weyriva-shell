@@ -49,16 +49,18 @@ classify_system_install() {
     local -a required_files=(
         /usr/share/weyriva/config/niri/config.kdl
         /usr/share/weyriva/greetd/config.toml
-        /usr/share/weyriva/wallpapers/light/weyriva-cactus.png
-        /usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png
+        /usr/share/weyriva/assets/wallpapers/weyriva-coast.svg
+        /usr/share/weyriva/assets/wallpapers/weyriva-coral.svg
+        /usr/share/weyriva/assets/wallpapers/weyriva-coast-night.svg
         /usr/share/wayland-sessions/weyriva.desktop
     )
     local -a source_trees=(shell greeter v4-host config/weyriva)
     local -a explicit_sources=(
         config/niri/config.kdl
         config/greetd/config.toml
-        assets/wallpapers/weyriva-cactus.png
-        assets/wallpapers/weyriva-cactus-dark.png
+        assets/wallpapers/weyriva-coast.svg
+        assets/wallpapers/weyriva-coral.svg
+        assets/wallpapers/weyriva-coast-night.svg
         user-share/wayland-sessions/weyriva.desktop
     )
     local -a required_links=(

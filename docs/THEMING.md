@@ -3,9 +3,10 @@
 ## Current status
 
 The QtQuick source currently provides project-owned semantic colors, light and
-dark presentation, reduced-motion state, and packaged light/dark cactus
-wallpapers. Wallpaper selection can update shell state; persistence and
-installed behavior must be verified from the final source and on XRY.
+dark presentation, reduced-motion state, and packaged light/dark coastal
+wallpapers. Wallpaper selection, dark mode, reduced motion, DND, and bar
+visibility are persisted as atomic user-local JSON; installed behavior still
+requires a real-session restart check.
 
 Dynamic palette extraction from wallpaper pixels is **not implemented**.
 Automatic time/system theme resolution, reduced-transparency mode, increased
@@ -20,11 +21,11 @@ The identity anchors are:
 |---|---|
 | Ink / foreground | `#141413` |
 | Ivory / surface | `#FAF9F5` |
-| Cactus / brand field | `#BCD1CA` |
+| Sea glass / brand field | `#BCD1CA` |
 | Clay / attention | `#D97757` |
 
 Dark mode is designed separately rather than mechanically inverted. Both modes
-retain readable foregrounds, explicit focus, recognizable cactus identity, and
+retain readable foregrounds, explicit focus, recognizable coastal identity, and
 safe greeter/lock contrast.
 
 Functional components consume shared semantic roles such as background,
@@ -57,16 +58,17 @@ current product uses the fixed Weyriva palette even when a wallpaper changes.
 
 ## State and persistence
 
-Configured state and currently rendered state are separate concepts. Until
-persistence is implemented and tested, documentation must describe changes as
-shell state rather than durable user configuration.
+Configured state and currently rendered state are separate concepts. The
+source persists appearance and shell preferences with an atomic Quickshell
+FileView, while invalid or missing JSON falls back to readable packaged
+values. Runtime restart behavior remains an explicit acceptance gate.
 
 Invalid state must fall back to a readable packaged theme. A theme error cannot
 produce a blank shell or prevent lock coverage.
 
 ## Greeter and lock
 
-Greeter and lock use the same cactus/ivory/ink brand family as the desktop
+Greeter and lock use the same sea-glass/ivory/ink brand family as the desktop
 environment. The lock credential region still consumes semantic surface and
 foreground roles so dark presentation remains legible.
 The greeter reads only system-visible resources before authentication. The lock
@@ -99,3 +101,10 @@ Current source-level checks should verify:
 Runtime and XRY acceptance additionally require rendering both modes, applying
 each wallpaper, exercising input, restarting the shell, and checking greeter
 and lock continuity. No such acceptance is inferred from source tests.
+
+## Portable wallpaper resources
+
+Wallpaper URLs resolve relative to the project-owned shell and asset roots.
+Source runs, user installs, system installs, and the AUR package preserve the
+same `weyriva/assets/wallpapers` relationship, so the picker does not depend
+on a hard-coded `/usr/share` URL.

@@ -135,6 +135,10 @@ class InstallerTests(unittest.TestCase):
             "rust",
             "wl-clipboard",
             "libnotify",
+            "cliphist",
+            "brightnessctl",
+            "playerctl",
+            "wireplumber",
         ):
             self.assertIn(dependency, content)
         self.assertIn("cargo build", content)
@@ -175,7 +179,10 @@ class InstallerTests(unittest.TestCase):
             ("cachyos-niri-noctalia", "noctalia-shell", "noctalia-qs")
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        package_tail = "rust cmake gcc wl-clipboard libnotify"
+        package_tail = (
+            "rust cmake gcc wl-clipboard libnotify "
+            "cliphist brightnessctl playerctl wireplumber"
+        )
         resolution = (
             "pacman -Sp --noconfirm --ask=4 --print-format %n "
             f"niri greetd quickshell cage foot noto-fonts {package_tail}"
@@ -236,7 +243,10 @@ class InstallerTests(unittest.TestCase):
             ("greetd-dms-greeter-git", "noctalia-qs")
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        package_tail = "rust cmake gcc wl-clipboard libnotify"
+        package_tail = (
+            "rust cmake gcc wl-clipboard libnotify "
+            "cliphist brightnessctl playerctl wireplumber"
+        )
         resolution = (
             "pacman -Sp --noconfirm --ask=4 --print-format %n "
             f"niri greetd quickshell cage foot noto-fonts {package_tail}"

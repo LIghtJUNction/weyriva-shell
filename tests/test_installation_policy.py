@@ -11,6 +11,13 @@ from weyriva_test_support import ROOT
 
 
 class InstallationPolicyTests(unittest.TestCase):
+    def test_full_gate_does_not_copy_git_or_rust_build_trees(self) -> None:
+        check = (ROOT / "scripts/check.sh").read_text()
+        self.assertIn("case ${entry##*/} in", check)
+        self.assertIn(".git | target) continue", check)
+        self.assertNotIn('cp -a "$ROOT" "$PROJECT_COPY"', check)
+        self.assertIn('"$ROOT/target/release/$executable"', check)
+
     def test_system_installer_preflights_before_mutating(self) -> None:
         content = (ROOT / "scripts/install-system.sh").read_text()
         self.assertIn("[[ $EUID -eq 0 ]]", content)
@@ -80,6 +87,10 @@ class InstallationPolicyTests(unittest.TestCase):
             "foot",
             "wl-clipboard",
             "libnotify",
+            "cliphist",
+            "brightnessctl",
+            "playerctl",
+            "wireplumber",
         ):
             self.assertIn(f"'{dependency}'", package)
         for dependency in (
@@ -90,6 +101,10 @@ class InstallationPolicyTests(unittest.TestCase):
             "foot",
             "wl-clipboard",
             "libnotify",
+            "cliphist",
+            "brightnessctl",
+            "playerctl",
+            "wireplumber",
         ):
             self.assertIn(f"\tdepends = {dependency}\n", srcinfo)
         self.assertIn("cargo build --release --locked", package)

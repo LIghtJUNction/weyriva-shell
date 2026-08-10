@@ -10,6 +10,53 @@ use crate::model::ActionOutcome;
 
 const ACTION_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Decodes one validated cliphist entry and writes it to the Wayland
+/// clipboard without invoking a shell.
+///
+/// # Errors
+///
+/// Returns an error for an invalid entry ID, unavailable commands, timeouts,
+/// or unsuccessful decode/copy processes.
+pub fn copy_clipboard_entry(id: &str) -> Result<()> {
+    if id.is_empty() || id.len() > 20 || !id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error::new(
+            "invalid_params",
+            "clipboard entry id is invalid",
+        ));
+    }
+
+    let mut decoder = Command::new("cliphist")
+        .args(["decode", id])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| Error::io("cannot start cliphist", &error))?;
+    let decoded_stdout = decoder
+        .stdout
+        .take()
+        .ok_or_else(|| Error::new("action_failed", "cliphist stdout was not piped"))?;
+    let copier = Command::new("wl-copy")
+        .stdin(decoded_stdout)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn();
+    let copier = match copier {
+        Ok(copier) => copier,
+        Err(error) => {
+            let _ = decoder.kill();
+            let _ = decoder.wait();
+            return Err(Error::io("cannot start wl-copy", &error));
+        }
+    };
+    if let Err(error) = wait_success(decoder, "clipboard decode") {
+        let mut copier = copier;
+        let _ = copier.kill();
+        let _ = copier.wait();
+        return Err(error);
+    }
+    wait_success(copier, "clipboard copy")
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum Action {
