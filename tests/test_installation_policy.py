@@ -11,6 +11,13 @@ from weyriva_test_support import ROOT
 
 
 class InstallationPolicyTests(unittest.TestCase):
+    def test_full_gate_does_not_copy_git_or_rust_build_trees(self) -> None:
+        check = (ROOT / "scripts/check.sh").read_text()
+        self.assertIn("case ${entry##*/} in", check)
+        self.assertIn(".git | target) continue", check)
+        self.assertNotIn('cp -a "$ROOT" "$PROJECT_COPY"', check)
+        self.assertIn('"$ROOT/target/release/$executable"', check)
+
     def test_system_installer_preflights_before_mutating(self) -> None:
         content = (ROOT / "scripts/install-system.sh").read_text()
         self.assertIn("[[ $EUID -eq 0 ]]", content)
@@ -80,6 +87,10 @@ class InstallationPolicyTests(unittest.TestCase):
             "foot",
             "wl-clipboard",
             "libnotify",
+            "cliphist",
+            "brightnessctl",
+            "playerctl",
+            "wireplumber",
         ):
             self.assertIn(f"'{dependency}'", package)
         for dependency in (
@@ -90,6 +101,10 @@ class InstallationPolicyTests(unittest.TestCase):
             "foot",
             "wl-clipboard",
             "libnotify",
+            "cliphist",
+            "brightnessctl",
+            "playerctl",
+            "wireplumber",
         ):
             self.assertIn(f"\tdepends = {dependency}\n", srcinfo)
         self.assertIn("cargo build --release --locked", package)
@@ -191,6 +206,17 @@ class InstallationPolicyTests(unittest.TestCase):
     def test_user_install_preserves_unmanaged_identical_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
+            binaries = (
+                ROOT / "target/release/weyriva",
+                ROOT / "target/release/weyriva-luau-host",
+            )
+            created_binaries = []
+            for binary in binaries:
+                if not binary.exists():
+                    binary.parent.mkdir(parents=True, exist_ok=True)
+                    binary.write_bytes(b"\x7fELF")
+                    binary.chmod(0o755)
+                    created_binaries.append(binary)
             destination = home / "config/weyriva/defaults.json"
             destination.parent.mkdir(parents=True)
             payload = (ROOT / "config/weyriva/defaults.json").read_bytes()
@@ -202,16 +228,20 @@ class InstallationPolicyTests(unittest.TestCase):
                 "XDG_DATA_HOME": str(home / "data"),
                 "XDG_STATE_HOME": str(home / "state"),
             }
-            subprocess.run(
-                [str(ROOT / "scripts/install.sh"), "--apply"],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            manifest = home / "state/weyriva/installed-files.tsv"
-            self.assertNotIn(str(destination), manifest.read_text())
-            self.assertEqual(
-                hashlib.sha256(destination.read_bytes()).digest(),
-                hashlib.sha256(payload).digest(),
-            )
+            try:
+                subprocess.run(
+                    [str(ROOT / "scripts/install.sh"), "--apply"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                manifest = home / "state/weyriva/installed-files.tsv"
+                self.assertNotIn(str(destination), manifest.read_text())
+                self.assertEqual(
+                    hashlib.sha256(destination.read_bytes()).digest(),
+                    hashlib.sha256(payload).digest(),
+                )
+            finally:
+                for binary in created_binaries:
+                    binary.unlink(missing_ok=True)

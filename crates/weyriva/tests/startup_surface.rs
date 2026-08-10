@@ -66,8 +66,15 @@ impl Fixture {
         write(&packaged_niri, "packaged niri\n");
         write(&packaged_shell.join("shell.qml"), "shell\n");
         write(&packaged_greeter.join("shell.qml"), "greeter\n");
-        for wallpaper in ["light/weyriva-cactus.png", "dark/weyriva-cactus-dark.png"] {
-            write(&packaged_data.join("wallpapers").join(wallpaper), "png\n");
+        for wallpaper in [
+            "weyriva-coast.svg",
+            "weyriva-coral.svg",
+            "weyriva-coast-night.svg",
+        ] {
+            write(
+                &packaged_data.join("assets/wallpapers").join(wallpaper),
+                "svg\n",
+            );
         }
         for unit in [
             "weyriva-ipc.service",

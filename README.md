@@ -40,7 +40,7 @@ runtime dependency nor a plugin language.
 Weyriva is intended to provide one coherent product across:
 
 - login, desktop, authenticated lock, suspend, logout, and recovery;
-- bar, tray, launcher, calendar, control center, notifications, clipboard,
+- bar, tray, launcher, CortexFS AI tasks, calendar, control center, notifications, clipboard,
   wallpaper, OSD, settings, screenshots, and desktop widgets;
 - a native Weyriva control plane and versioned plugin compatibility layers;
 - a deterministic default profile with no installer questionnaire.
@@ -96,12 +96,19 @@ Clean-machine, published-AUR, and non-Arch evidence is still required before
 calling it production-ready. It does not restart greetd or an inactive user
 service.
 
+The Arch and AUR paths include `cliphist`, `brightnessctl`, `playerctl`, and
+`wireplumber` for the clipboard, OSD, and media-key surfaces. On best-effort
+non-Arch installs those integrations expose an explicit unavailable/error
+state when the corresponding command is not installed.
+
 ## Intended everyday controls
 
 The fixed interaction contract is:
 
 ```text
 Mod+Space       launcher
+Mod+A           AI task launcher
+Mod+Tab         window overview
 Mod+Return      terminal
 Mod+V           clipboard history
 Mod+C           control center
@@ -117,6 +124,21 @@ Mod+1/2/3       workspaces
 
 These bindings describe the target product. Each surface remains unverified
 until pointer, keyboard, focus, and visible-state acceptance passes.
+
+## CortexFS AI tasks
+
+The AI task launcher connects to CortexFS through its native Unix-socket JSONL
+session ABI. It discovers the complete live `ctx agent ps` tree on every manual
+refresh—Weyriva contains no preset agent names or agent-count limit. Selecting
+an agent loads its current model, working directory, and tool inventory; task
+output streams into a private durable session with explicit allow-once/deny
+approval, cancellation, indexed history reload, and handoffs to `ctx agent
+chat` or `attach`. Prompts are written to the socket and never placed in
+process arguments.
+
+Type `?` followed by a task in the regular launcher to hand it to the AI task
+surface. When CortexFS or `ctx` is unavailable, the route stays usable and
+shows an explicit offline state instead of inventing fallback agents.
 
 ## Weyriva Plugins
 

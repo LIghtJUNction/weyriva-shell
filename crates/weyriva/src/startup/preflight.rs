@@ -14,7 +14,11 @@ use super::model::{
 use super::safety::{validate_destination, validate_regular_file, validate_safe_chain};
 use super::time::startup_timestamp;
 
-const WALLPAPERS: &[&str] = &["light/weyriva-cactus.png", "dark/weyriva-cactus-dark.png"];
+const WALLPAPERS: &[&str] = &[
+    "assets/wallpapers/weyriva-coast.svg",
+    "assets/wallpapers/weyriva-coral.svg",
+    "assets/wallpapers/weyriva-coast-night.svg",
+];
 pub(super) const EXPECTED_DISPLAY_MANAGER: &str = "/usr/lib/systemd/system/greetd.service";
 const LEGACY_MARKERS: &[(&str, &[&str])] = &[
     (
@@ -230,10 +234,7 @@ fn validate_required_files(context: &StartupContext) -> Result<()> {
         validate_regular_file(path, description)?;
     }
     for wallpaper in WALLPAPERS {
-        validate_regular_file(
-            &layout.packaged_data.join("wallpapers").join(wallpaper),
-            "required wallpaper",
-        )?;
+        validate_regular_file(&layout.packaged_data.join(wallpaper), "required wallpaper")?;
     }
     for unit in WEYRIVA_UNITS {
         validate_regular_file(&layout.packaged_units.join(unit), "Weyriva user unit")?;

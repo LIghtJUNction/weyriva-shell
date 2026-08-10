@@ -143,12 +143,14 @@ case "$distro" in
         packages=(
             niri greetd quickshell cage foot noto-fonts
             rust cmake gcc wl-clipboard libnotify
+            cliphist brightnessctl playerctl wireplumber
         )
         resolve_arch
         if [[ ${#blocking_packages[@]} -gt 0 ]]; then
             nonconflicting_packages=(
                 niri greetd cage foot noto-fonts
                 rust cmake gcc wl-clipboard libnotify
+                cliphist brightnessctl playerctl wireplumber
             )
             run_as_root pacman -S --noconfirm --needed \
                 "${nonconflicting_packages[@]}"

@@ -21,8 +21,8 @@ Weyriva combines two separate design responsibilities:
   composition, and rounded hand-drawn marks only in environmental art, brand
   moments, greeter/lock composition, and genuine empty states;
 - the Apple-inspired behavior layer provides restrained hierarchy, immediate
-  feedback, source-screen ownership, focus clarity, and source-specific
-  interruptible motion.
+  feedback, continuous/concentric geometry, source-screen ownership, focus
+  clarity, and source-specific interruptible motion.
 
 These are original project-owned implementations, not copied assets,
 affiliations, or runtime dependencies.
@@ -31,14 +31,14 @@ affiliations, or runtime dependencies.
 
 The primary visual grammar is:
 
-- cactus `#BCD1CA` as the characteristic accent field;
+- sea glass `#BCD1CA` as the characteristic accent field;
 - ivory `#FAF9F5` as the paper/carrier color;
 - ink `#141413` as the primary mark and text color;
 - flat, opaque fills;
 - at most one irregular brand carrier or deliberately asymmetric composition;
 - rounded, slightly uneven linework with generous negative space.
 
-The existing flat cactus artwork is the reference. Avoid gradients, gloss,
+The existing flat coastal artwork is the reference. Avoid gradients, gloss,
 glass-like decoration, photographic lighting, generic stock cards, perfect
 geometric repetition, dense cards nested inside cards, and a universal carrier
 around functional panels.
@@ -52,6 +52,8 @@ consume semantic theme roles rather than scattering these literals.
 Interactive UI follows these invariants:
 
 - feedback begins on pointer-down or key activation;
+- large functional surfaces use continuous corners, with inner materials inset
+  concentrically from the outer silhouette;
 - focus remains visibly distinct from hover and selection;
 - entry and exit use the same source-anchored path;
 - interrupted motion continues from its current visible value;
@@ -66,7 +68,8 @@ Routes intentionally use three spatial families:
 
 | Family | Routes | Placement and structure |
 |---|---|---|
-| Command palette | launcher | centered search plus dense result rows |
+| Command palette | launcher | centered search and dense result rows |
+| Task workspace | AI tasks | runtime agent/session navigation, timeline, composer, and run context |
 | Utility popovers | control center, calendar, notifications | compact, top-anchored to distinct controls on the centered bar |
 | Structured workspaces | wallpaper, settings | centered navigation/content regions |
 
@@ -79,6 +82,8 @@ entered. Switching between them retargets from current position and size.
 The required behavior of each route is:
 
 - Launcher filters real desktop entries and executes the selected entry.
+- AI tasks discovers every CortexFS agent at runtime, streams the selected
+  agent's durable session, and keeps tool approval explicit.
 - Control center uses compact rows of real controls with visible state.
 - Calendar provides previous/next month actions and a navigable date grid.
 - Notifications allow dismissal and expose an explicit empty state.
@@ -129,3 +134,53 @@ authentication, or secure lock recovery.
 Runtime and XRY evidence are recorded separately in [Testing](TESTING.md).
 See also [Motion](MOTION.md), [Theming](THEMING.md), and
 [Accessibility](ACCESSIBILITY.md).
+
+## Editorial workspace pass
+
+The default light wallpaper is
+`assets/wallpapers/weyriva-coast.svg`. It uses one readable scene—a clay river
+crossing an ink-drawn coastal valley—within the exact sea-glass `#BCD1CA`, ivory
+`#FAF9F5`, ink `#141413`, and clay `#D97757` palette. The artwork leaves the
+right side quiet for functional surfaces and uses only opaque vector fills.
+Generated drafts that introduced gradients or
+vignettes were rejected.
+
+The functional shell remains flat and restrained. It uses continuous outer
+silhouettes, concentric material insets, one warm attention accent, and visible
+keyboard focus. Gradients, glossy highlights, generic one-pixel card borders,
+and texture are outside the runtime visual contract.
+
+## Workspace and system surfaces
+
+The centered surface family now includes:
+
+- a Niri-backed window overview with refresh, keyboard selection, observable
+  focus progress, and retained errors;
+- searchable `cliphist` history with validated numeric IDs, bounded results,
+  daemon-owned copy, and confirmed history clearing;
+- a session surface with immediate lock and second-press confirmation for
+  logout, restart, and power off.
+- an AI task launcher whose agent count, names, hierarchy, models, and tools are
+  read from CortexFS rather than compiled into Weyriva.
+
+The top bar includes a bounded dynamic Niri workspace rail, direct overview and
+clipboard entry points, a stateful DND chip, and the existing source-owned
+utility routes. Volume and brightness keys use a non-intercepting OSD overlay;
+command and readback failures remain visible as toasts.
+
+## Preference boundary
+
+Dark mode, selected wallpaper, reduced motion, DND, and bar visibility are
+stored as bounded JSON through an atomic Quickshell `FileView`. Invalid or
+missing state falls back to the packaged defaults. Runtime persistence still
+requires a real-session restart check; source wiring alone is not that proof.
+
+## Acceptance status
+
+Python behavior/visual contracts and Qt QML lint cover the source structure,
+fixed commands, route ownership, palette grammar, and component bounds. The AI
+task workspace additionally has live three-output Wayland evidence for source
+ownership, overlay stacking, dynamic CortexFS discovery, history rendering,
+input, and runtime-error presentation. Successful provider completion, the
+other route families, OSD hardware behavior, secure lock recovery, and greetd
+authentication remain separate runtime acceptance gates.

@@ -28,7 +28,7 @@ impl NiriClient {
     ///
     /// Returns an error for unsupported operations, process failure, or invalid JSON.
     pub fn json(&self, operation: &str) -> Result<JsonValue> {
-        if !matches!(operation, "outputs" | "windows") {
+        if !matches!(operation, "outputs" | "windows" | "workspaces") {
             return Err(Error::new("invalid_operation", "unsupported Niri query"));
         }
         let command = CommandSpec::new("niri", [os("msg"), os("-j"), OsString::from(operation)])

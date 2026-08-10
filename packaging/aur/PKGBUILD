@@ -6,7 +6,7 @@ pkgdesc='An independent Quickshell desktop environment for Niri (Git version)'
 arch=('x86_64' 'aarch64')
 url='https://github.com/LIghtJUNction/weyriva-shell'
 license=('MIT')
-depends=('systemd>=254' 'niri' 'greetd' 'quickshell>=0.3' 'cage' 'foot' 'noto-fonts' 'wl-clipboard' 'libnotify')
+depends=('systemd>=254' 'niri' 'greetd' 'quickshell>=0.3' 'cage' 'foot' 'noto-fonts' 'wl-clipboard' 'libnotify' 'cliphist' 'brightnessctl' 'playerctl' 'wireplumber')
 makedepends=('git' 'rust>=1.88' 'cmake')
 options=('!lto')
 provides=('weyriva-shell')
@@ -34,8 +34,7 @@ package() {
   cp -a v4-host "$pkgdir/usr/share/weyriva/"
   cp -a config/weyriva "$pkgdir/usr/share/weyriva/config/"
   install -Dm644 config/greetd/config.toml "$pkgdir/usr/share/weyriva/greetd/config.toml"
-  install -Dm644 assets/wallpapers/weyriva-cactus.png "$pkgdir/usr/share/weyriva/wallpapers/light/weyriva-cactus.png"
-  install -Dm644 assets/wallpapers/weyriva-cactus-dark.png "$pkgdir/usr/share/weyriva/wallpapers/dark/weyriva-cactus-dark.png"
+  install -Dm644 assets/wallpapers/*.svg -t "$pkgdir/usr/share/weyriva/assets/wallpapers"
   install -Dm644 user-share/wayland-sessions/weyriva.desktop "$pkgdir/usr/share/wayland-sessions/weyriva.desktop"
   install -Dm644 systemd/*.service -t "$pkgdir/usr/lib/systemd/user"
   install -d "$pkgdir/usr/lib/systemd/user/niri.service.wants"

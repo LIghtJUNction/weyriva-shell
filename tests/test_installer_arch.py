@@ -16,6 +16,7 @@ class InstallerTests(unittest.TestCase):
             fake_root = Path(temporary)
             log = fake_root / "calls.log"
             generic_installed = fake_root / "generic-quickshell"
+            bash_environment = fake_root / "bash-env"
             binaries = (
                 ROOT / "target/release/weyriva",
                 ROOT / "target/release/weyriva-luau-host",
@@ -31,6 +32,16 @@ class InstallerTests(unittest.TestCase):
 
             executable("uname", "printf '%s\\n' Linux\n")
             executable("id")
+            bash_environment.write_text(
+                "source() {\n"
+                "  if [[ ${1:-} == /etc/os-release || ${1:-} == /usr/lib/os-release ]]; then\n"
+                "    ID=arch\n"
+                "    ID_LIKE=arch\n"
+                "    return 0\n"
+                "  fi\n"
+                "  builtin source \"$@\"\n"
+                "}\n"
+            )
             executable(
                 "getent",
                 f"[[ ${{1:-}} == passwd && ${{2:-}} == tester ]] && "
@@ -108,7 +119,11 @@ class InstallerTests(unittest.TestCase):
             try:
                 completed = subprocess.run(
                     ["/usr/bin/bash", str(ROOT / "install.sh")],
-                    env={"PATH": str(fake_root), "USER": "tester"},
+                    env={
+                        "BASH_ENV": str(bash_environment),
+                        "PATH": str(fake_root),
+                        "USER": "tester",
+                    },
                     capture_output=True,
                     text=True,
                     check=False,
@@ -135,6 +150,10 @@ class InstallerTests(unittest.TestCase):
             "rust",
             "wl-clipboard",
             "libnotify",
+            "cliphist",
+            "brightnessctl",
+            "playerctl",
+            "wireplumber",
         ):
             self.assertIn(dependency, content)
         self.assertIn("cargo build", content)
@@ -175,7 +194,10 @@ class InstallerTests(unittest.TestCase):
             ("cachyos-niri-noctalia", "noctalia-shell", "noctalia-qs")
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        package_tail = "rust cmake gcc wl-clipboard libnotify"
+        package_tail = (
+            "rust cmake gcc wl-clipboard libnotify "
+            "cliphist brightnessctl playerctl wireplumber"
+        )
         resolution = (
             "pacman -Sp --noconfirm --ask=4 --print-format %n "
             f"niri greetd quickshell cage foot noto-fonts {package_tail}"
@@ -236,7 +258,10 @@ class InstallerTests(unittest.TestCase):
             ("greetd-dms-greeter-git", "noctalia-qs")
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        package_tail = "rust cmake gcc wl-clipboard libnotify"
+        package_tail = (
+            "rust cmake gcc wl-clipboard libnotify "
+            "cliphist brightnessctl playerctl wireplumber"
+        )
         resolution = (
             "pacman -Sp --noconfirm --ask=4 --print-format %n "
             f"niri greetd quickshell cage foot noto-fonts {package_tail}"

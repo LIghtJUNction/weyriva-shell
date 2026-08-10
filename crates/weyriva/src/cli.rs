@@ -78,6 +78,10 @@ struct ShellArgs {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Route {
     Launcher,
+    Tasks,
+    Overview,
+    Clipboard,
+    Session,
     ControlCenter,
     Calendar,
     Notifications,
@@ -85,10 +89,46 @@ enum Route {
     Settings,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum OsdKind {
+    Volume,
+    Brightness,
+}
+
+impl OsdKind {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Volume => "volume",
+            Self::Brightness => "brightness",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum OsdDirection {
+    Up,
+    Down,
+    Toggle,
+}
+
+impl OsdDirection {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Toggle => "toggle",
+        }
+    }
+}
+
 impl Route {
     const fn name(self) -> &'static str {
         match self {
             Self::Launcher => "launcher",
+            Self::Tasks => "tasks",
+            Self::Overview => "overview",
+            Self::Clipboard => "clipboard",
+            Self::Session => "session",
             Self::ControlCenter => "control-center",
             Self::Calendar => "calendar",
             Self::Notifications => "notifications",
@@ -102,7 +142,13 @@ impl Route {
 enum ShellCommand {
     Run,
     ReconcileLock,
-    Route { name: Route },
+    Route {
+        name: Route,
+    },
+    Osd {
+        kind: OsdKind,
+        direction: OsdDirection,
+    },
     Lock,
 }
 
@@ -288,6 +334,10 @@ fn shell_command(command: &ShellCommand) -> Result<i32> {
         }
         ShellCommand::Route { name } => {
             print_json(&shell.call("route", &[name.name()])?);
+            Ok(0)
+        }
+        ShellCommand::Osd { kind, direction } => {
+            print_json(&shell.call("osd", &[kind.name(), direction.name()])?);
             Ok(0)
         }
         ShellCommand::Lock => {

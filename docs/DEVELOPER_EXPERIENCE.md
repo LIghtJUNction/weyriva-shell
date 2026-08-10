@@ -4,7 +4,7 @@
 
 Weyriva provides a deterministic Niri-oriented desktop layout, a local control
 CLI, and repository-owned Quickshell surfaces. The current source exposes the
-core launcher, control center, calendar, notifications, wallpaper, settings,
+core launcher, CortexFS AI task launcher, control center, calendar, notifications, wallpaper, settings,
 terminal, lock, and compositor actions listed below.
 
 XRY currently previews the independently reviewed UI iteration 3 shell/greeter
@@ -18,6 +18,8 @@ installed product path is interactive.
 | Intent | Binding | Result |
 |---|---|---|
 | Launch/search | `Mod+Space` | centered Launcher |
+| Launch AI task | `Mod+A` | centered CortexFS task workspace |
+| New AI session | `Ctrl+N` | while the CortexFS task workspace is active |
 | Notifications | `Mod+N` | compact popover at the right bar source |
 | Control center | `Mod+C` | compact popover at the left utility source |
 | Wallpaper | `Mod+W` | centered Wallpaper |
@@ -38,23 +40,31 @@ Structural personalization belongs in a maintained fork.
 ## Surface workflows
 
 The launcher filters actual desktop entries and executes a selected entry. It
-does not interpolate search text into a shell command.
+does not interpolate search text into a shell command. A query beginning with
+`?` is transferred as an in-memory draft to the CortexFS task route.
+
+The AI task route discovers the live CortexFS agent tree without preset names
+or a fixed count. It sends prompts over the selected agent's native socket,
+streams JSONL events, exposes explicit tool approvals, and keeps durable-session
+recovery and terminal handoff available. It does not put prompt text in argv.
 
 The control center presents compact rows of real controls. The calendar exposes
 month navigation and a date grid. Notifications are dismissible and include an
 empty state. Wallpaper selection is visual and updates wallpaper and related
 appearance state. Settings shows only explicit values and implemented actions.
 
-The launcher is a centered command palette; wallpaper/settings are centered
-structured workspaces. Control center, calendar, and notifications are compact
-popovers tied respectively to their left, center, and right bar sources on the
-owning screen.
+The launcher is a centered command palette. AI tasks use a unified split-view
+workspace for live agents, durable sessions, the task timeline, and run context;
+wallpaper/settings remain centered structured workspaces. Control center,
+calendar, and notifications are compact popovers tied respectively to their
+left, center, and right bar sources on the owning screen.
 
 ## Theme and personalization
 
 Light and dark presentation are supported in source. Dynamic wallpaper color
 extraction is not implemented. Wallpaper choices use the fixed Weyriva palette
-and must not be described as generated themes.
+and must not be described as generated themes. Appearance state is stored in
+`Quickshell.statePath("preferences.json")` with atomic writes.
 
 The product avoids installation questions and per-user structural options.
 Small runtime choices such as the current appearance or wallpaper may be state;

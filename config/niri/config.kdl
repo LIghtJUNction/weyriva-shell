@@ -1,7 +1,14 @@
 // Weyriva Shell niri defaults. Local overrides can be imported at the end.
 input {
-    keyboard { xkb { layout "us"; }; }
-    touchpad { tap; natural-scroll; }
+    keyboard {
+        xkb {
+            layout "us"
+        }
+    }
+    touchpad {
+        tap
+        natural-scroll
+    }
 }
 
 layout {
@@ -10,8 +17,8 @@ layout {
     default-column-width { proportion 0.55; }
     focus-ring {
         width 3
-        active-color "#BCD1CA"
-        inactive-color "#14141333"
+        active-color "#9BE1C1"
+        inactive-color "#10181533"
     }
     border { off; }
     shadow { off; }
@@ -23,11 +30,23 @@ screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
 binds {
     Mod+Space { spawn "weyriva" "shell" "route" "launcher"; }
+    Mod+A { spawn "weyriva" "shell" "route" "tasks"; }
+    Mod+Tab { spawn "weyriva" "shell" "route" "overview"; }
+    Mod+V { spawn "weyriva" "shell" "route" "clipboard"; }
     Mod+N { spawn "weyriva" "shell" "route" "notifications"; }
     Mod+C { spawn "weyriva" "shell" "route" "control-center"; }
     Mod+W { spawn "weyriva" "shell" "route" "wallpaper"; }
     Mod+Shift+T { spawn "weyriva" "shell" "route" "settings"; }
+    Mod+Shift+E { spawn "weyriva" "shell" "route" "session"; }
     Mod+Shift+X { spawn "weyriva" "shell" "lock"; }
+    XF86AudioRaiseVolume { spawn "weyriva" "shell" "osd" "volume" "up"; }
+    XF86AudioLowerVolume { spawn "weyriva" "shell" "osd" "volume" "down"; }
+    XF86AudioMute { spawn "weyriva" "shell" "osd" "volume" "toggle"; }
+    XF86MonBrightnessUp { spawn "weyriva" "shell" "osd" "brightness" "up"; }
+    XF86MonBrightnessDown { spawn "weyriva" "shell" "osd" "brightness" "down"; }
+    XF86AudioPlay { spawn "playerctl" "play-pause"; }
+    XF86AudioNext { spawn "playerctl" "next"; }
+    XF86AudioPrev { spawn "playerctl" "previous"; }
     Mod+Return { spawn "foot"; }
     Mod+Q { close-window; }
     Mod+H { focus-column-left; }
@@ -46,7 +65,7 @@ binds {
 }
 
 window-rule {
-    geometry-corner-radius 14
+    geometry-corner-radius 18
     clip-to-geometry true
 }
 

@@ -13,8 +13,7 @@ Item {
         const options = [{label: "All", value: "", glyph: ""}]
         for (let index = 0; index < providerCategories.length; ++index) {
             const category = providerCategories[index]
-            if (!category || typeof category.label !== "string"
-                    || category.label.length === 0)
+            if (!category || typeof category.label !== "string" || category.label.length === 0)
                 continue
             options.push({
                 label: category.label,
@@ -98,12 +97,10 @@ Item {
         values: {
             const query = search.text.trim().toLowerCase()
             return DesktopEntries.applications.values.filter(application => {
-                if (query.length === 0)
-                    return true
+                if (query.length === 0) return true
                 const name = application.name || ""
                 const genericName = application.genericName || ""
-                return name.toLowerCase().includes(query)
-                    || genericName.toLowerCase().includes(query)
+                return name.toLowerCase().includes(query) || genericName.toLowerCase().includes(query)
             })
         }
     }
@@ -124,9 +121,8 @@ Item {
         Qt.callLater(launcherList.resetSelection)
     }
     function normalizeCategory() {
-        const stillDeclared = providerCategories.some(
-            category => category && category.label === selectedCategory
-        )
+        const stillDeclared = providerCategories.some(category =>
+            category && category.label === selectedCategory)
         if (selectedCategory.length > 0 && !stillDeclared)
             selectedCategory = ""
         Qt.callLater(launcherList.resetSelection)
@@ -148,7 +144,7 @@ Item {
             id: search
             Layout.fillWidth: true
             implicitHeight: 50
-            placeholderText: "Search applications"
+            placeholderText: "Search applications · ? ask AI"
             color: Theme.foreground
             placeholderTextColor: Theme.muted
             font.pixelSize: 17
@@ -156,7 +152,13 @@ Item {
             rightPadding: 4
             selectByMouse: true
             onTextChanged: Qt.callLater(launcherList.resetSelection)
-            onAccepted: launcherList.launchCurrent()
+            onAccepted: {
+                const value = text.trim()
+                if (value.startsWith("?"))
+                    ShellState.openTaskDraft(value.slice(1).trim(), ShellState.routeScreen)
+                else
+                    launcherList.launchCurrent()
+            }
             Keys.onDownPressed: {
                 launcherList.resetSelection()
                 launcherList.forceActiveFocus()
@@ -181,8 +183,7 @@ Item {
         Flickable {
             Layout.fillWidth: true
             implicitHeight: 30
-            visible: pluginBridge.providerMode
-                && root.categoryOptions.length > 1
+            visible: pluginBridge.providerMode && root.categoryOptions.length > 1
             contentWidth: categoryRow.width
             contentHeight: height
             clip: true
@@ -203,8 +204,7 @@ Item {
                         scale: down && !ShellState.reducedMotion ? 0.96 : 1
                         opacity: down ? 0.76 : 1
                         Behavior on scale {
-                            enabled: !categoryButton.down
-                                && !ShellState.reducedMotion
+                            enabled: !categoryButton.down && !ShellState.reducedMotion
                             NumberAnimation { duration: Theme.motionFast }
                         }
                         onClicked: {

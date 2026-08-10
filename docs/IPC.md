@@ -52,6 +52,7 @@ The native lane incrementally controls Weyriva surfaces and state:
 - status and readiness;
 - panel open, close, and toggle;
 - notifications and Do Not Disturb;
+- validated clipboard-history decode and copy;
 - theme and wallpaper;
 - screenshot requests;
 - session lock, lock-and-suspend, logout, reboot, and shutdown;

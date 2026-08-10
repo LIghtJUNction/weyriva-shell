@@ -1,17 +1,32 @@
 singleton Theme 1.0 Theme.qml
 singleton ShellState 1.0 ShellState.qml
 ActionButton 1.0 ActionButton.qml
+AiTaskSurface 1.0 AiTaskSurface.qml
 BrandMark 1.0 BrandMark.qml
 CalendarSurface 1.0 CalendarSurface.qml
+ClipboardSurface 1.0 ClipboardSurface.qml
 ControlCenterSurface 1.0 ControlCenterSurface.qml
+ContinuousSurface 1.0 ContinuousSurface.qml
+CortexBridge 1.0 CortexBridge.qml
+DndChip 1.0 DndChip.qml
 LauncherSurface 1.0 LauncherSurface.qml
 LockSurface 1.0 LockSurface.qml
 NotificationsSurface 1.0 NotificationsSurface.qml
+OsdController 1.0 OsdController.qml
+OverviewSurface 1.0 OverviewSurface.qml
 PluginLauncherBridge 1.0 PluginLauncherBridge.qml
+SessionSurface 1.0 SessionSurface.qml
 SettingsSurface 1.0 SettingsSurface.qml
+StatusOverlay 1.0 StatusOverlay.qml
+StatusOverlayHost 1.0 StatusOverlayHost.qml
 SurfaceHeader 1.0 SurfaceHeader.qml
 SurfacePanel 1.0 SurfacePanel.qml
+TaskInspector 1.0 TaskInspector.qml
+TaskMessage 1.0 TaskMessage.qml
+TaskNavigation 1.0 TaskNavigation.qml
+TaskWorkspace 1.0 TaskWorkspace.qml
 TopBar 1.0 TopBar.qml
 UtilityRow 1.0 UtilityRow.qml
 WallpaperPreview 1.0 WallpaperPreview.qml
 WallpaperSurface 1.0 WallpaperSurface.qml
+WorkspaceRail 1.0 WorkspaceRail.qml
