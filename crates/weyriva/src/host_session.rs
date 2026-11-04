@@ -162,7 +162,7 @@ impl HostSession {
     }
 
     pub fn take_startup_actions(&mut self) -> JsonValue {
-        JsonValue::Array(self.startup_actions.drain(..).collect())
+        JsonValue::Array(std::mem::take(&mut self.startup_actions))
     }
 
     /// Polls the child without blocking.

@@ -201,7 +201,10 @@ fn clipboard_copy_rejects_invalid_shapes_and_ids_before_process_start() {
         let mut harness = Harness::new();
         let response = harness.request("weyriva.clipboard.copy", &invalid);
         assert_eq!(response["error"]["code"], "invalid_params");
-        assert!(harness.process.commands().is_empty());
+        assert_eq!(
+            harness.process.commands(),
+            Vec::<weyriva::process::CommandSpec>::new()
+        );
     }
 }
 
